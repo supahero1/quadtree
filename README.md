@@ -24,6 +24,8 @@ Some steps for rookies:
 
 	Quadtree positions can be negative, yes.
 
+	ALl positions (including the Quadtree as well as any Entities) are in the middle of the rectangle. Width and height are halved.
+
 	`Quadtree.MinSize` - the limit on how small cells may be. It applies to both width and height.
 
 4. Call `EntityIdx = QuadtreeInsert(&Quadtree, Entity)` to insert new entities, and `QuadtreeRemove(&Quadtree, EntityIdx)` to remove them.
