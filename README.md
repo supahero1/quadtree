@@ -1,4 +1,4 @@
-This is a pretty efficient 2D C Quadtree.
+This is a pretty efficient 2D C Quadtree that does not use any recursion.
 
 On my PC at least, it handles 100k entities of varying sizes at, well, something resembling 60FPS. Here's a screenshot of the simulation (that you can run yourself if you keep reading down):
 
