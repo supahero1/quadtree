@@ -45,6 +45,14 @@ VIEW View = {0};
 
 static int Error;
 
+double
+GetTime(
+	void
+	)
+{
+	return glfwGetTime() * 1000.0f;
+}
+
 static double
 Lerp(
 	double Start,
@@ -250,5 +258,8 @@ DrawFree(
 {
 	free(Pixels);
 
+	glDisable(GL_BLEND);
+
 	glfwDestroyWindow(Window);
+	glfwTerminate();
 }

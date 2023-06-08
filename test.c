@@ -2,11 +2,11 @@
 #include "quadtree.h"
 
 #include <time.h>
-#include <math.h>
 #include <stdio.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <tgmath.h>
 
 #define ITER UINT32_C(100000)
 #define RADIUS_ITER 100
@@ -16,7 +16,7 @@
 #define ARENA_WIDTH 65536.0f
 #define ARENA_HEIGHT 65536.0f
 #define MEASURE_TICKS 50
-#define VELOCITY_LOSS 0.9999f
+#define VELOCITY_LOSS 0.9995f
 #define COLLISION_STRENGTH 1.0f
 #define INITIAL_VELOCITY 1.0f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -24,14 +24,14 @@
 
 typedef struct ENTITY
 {
-	float VX, VY;
+	QUADTREE_POSITION_T VX, VY;
 }
 ENTITY;
 
 static QUADTREE Quadtree;
 static ENTITY Entities[ITER + 1];
 static uint32_t FollowingEntity = -1;
-static float MaxVelocity;
+static QUADTREE_POSITION_T MaxVelocity;
 
 static double Start, End;
 static double Time;
@@ -47,26 +47,12 @@ static MEASUREMENT MeasureCollide;
 static MEASUREMENT MeasureUpdate;
 static MEASUREMENT MeasureQuery;
 
-static int Error;
-
 static float
 randf(
 	void
 	)
 {
 	return rand() / (float) RAND_MAX;
-}
-
-static double
-GetTime(
-	void
-	)
-{
-	struct timespec tp;
-
-    (void) clock_gettime(CLOCK_REALTIME, &tp);
-
-    return tp.tv_sec * 1000 + tp.tv_nsec / 1000000.0;
 }
 
 static double
@@ -92,11 +78,11 @@ Measure(
 
 static void
 ClickQuery(
-	const QUADTREE* Quadtree,
+	QUADTREE* Quadtree,
 	uint32_t EntityIdx
 	)
 {
-	float Velocity = sqrtf(
+	QUADTREE_POSITION_T Velocity = sqrt(
 		Entities[EntityIdx].VX * Entities[EntityIdx].VX +
 		Entities[EntityIdx].VY * Entities[EntityIdx].VY
 		);
@@ -107,9 +93,10 @@ ClickQuery(
 	}
 }
 
+
 void
 Clicked(
-	float X, float Y
+	double X, double Y
 	)
 {
 	FollowingEntity = -1;
@@ -120,7 +107,7 @@ Clicked(
 	Quadtree.Query = OldQuery;
 }
 
-static void
+static uint8_t
 UpdateEntity(
 	QUADTREE* Quadtree,
 	uint32_t EntityIdx
@@ -132,6 +119,8 @@ UpdateEntity(
 	Entity->VX *= VELOCITY_LOSS;
 	Entity->VY *= VELOCITY_LOSS;
 
+	QUADTREE_ENTITY Copy = *QTEntity;
+
 	QTEntity->X += Entity->VX;
 	QTEntity->Y += Entity->VY;
 
@@ -139,23 +128,23 @@ UpdateEntity(
 	if(QTEntity->X - QTEntity->W < Quadtree->X - Quadtree->W)
 	{
 		QTEntity->X = Quadtree->X - Quadtree->W + QTEntity->W;
-		Entity->VX = fabsf(Entity->VX) * BOUNDS_VELOCITY_LOSS;
+		Entity->VX = fabs(Entity->VX) * BOUNDS_VELOCITY_LOSS;
 	}
 	else if(QTEntity->X + QTEntity->W > Quadtree->X + Quadtree->W)
 	{
 		QTEntity->X = Quadtree->X + Quadtree->W - QTEntity->W;
-		Entity->VX = -fabsf(Entity->VX) * BOUNDS_VELOCITY_LOSS;
+		Entity->VX = -fabs(Entity->VX) * BOUNDS_VELOCITY_LOSS;
 	}
 
 	if(QTEntity->Y - QTEntity->H < Quadtree->Y - Quadtree->H)
 	{
 		QTEntity->Y = Quadtree->Y - Quadtree->H + QTEntity->H;
-		Entity->VY = fabsf(Entity->VY) * BOUNDS_VELOCITY_LOSS;
+		Entity->VY = fabs(Entity->VY) * BOUNDS_VELOCITY_LOSS;
 	}
 	else if(QTEntity->Y + QTEntity->H > Quadtree->X + Quadtree->H)
 	{
 		QTEntity->Y = Quadtree->Y + Quadtree->H - QTEntity->H;
-		Entity->VY = -fabsf(Entity->VY) * BOUNDS_VELOCITY_LOSS;
+		Entity->VY = -fabs(Entity->VY) * BOUNDS_VELOCITY_LOSS;
 	}
 #else
 	if(QTEntity->X - QTEntity->W < Quadtree->X - Quadtree->W)
@@ -180,12 +169,18 @@ UpdateEntity(
 		--Entity->VY;
 	}
 #endif
+
+	return (Copy.X != QTEntity->X || Copy.Y != QTEntity->Y ||
+		Copy.W != QTEntity->W || Copy.H != QTEntity->H);
 }
 
 static int
 Intersects(
-	float x1, float y1, float w1, float h1,
-	float x2, float y2, float w2, float h2
+	QUADTREE_POSITION_T x1, QUADTREE_POSITION_T y1,
+	QUADTREE_POSITION_T w1, QUADTREE_POSITION_T h1,
+
+	QUADTREE_POSITION_T x2, QUADTREE_POSITION_T y2,
+	QUADTREE_POSITION_T w2, QUADTREE_POSITION_T h2
 	)
 {
 	return
@@ -213,7 +208,7 @@ AreEntitiesColliding(
 
 static void
 CollideEntities(
-	const QUADTREE* Quadtree,
+	QUADTREE* Quadtree,
 	uint32_t EntityAIdx,
 	uint32_t EntityBIdx
 	)
@@ -223,9 +218,9 @@ CollideEntities(
 	ENTITY* EntityA = Entities + EntityAIdx;
 	ENTITY* EntityB = Entities + EntityBIdx;
 
-	float DiffX = QTEntityA->X - QTEntityB->X;
-	float DiffY = QTEntityA->Y - QTEntityB->Y;
-	float Length = sqrtf(DiffX * DiffX + DiffY * DiffY) / COLLISION_STRENGTH;
+	QUADTREE_POSITION_T DiffX = QTEntityA->X - QTEntityB->X;
+	QUADTREE_POSITION_T DiffY = QTEntityA->Y - QTEntityB->Y;
+	QUADTREE_POSITION_T Length = sqrt(DiffX * DiffX + DiffY * DiffY) / COLLISION_STRENGTH;
 	if(Length == 0)
 	{
 		DiffX = 1;
@@ -236,11 +231,11 @@ CollideEntities(
 	DiffX *= Length;
 	DiffY *= Length;
 
-	float MassA = QTEntityA->W * QTEntityA->H;
-	float MassB = QTEntityB->W * QTEntityB->H;
-	float MassTotal = MassA + MassB;
-	float MultiplierA = (MassTotal - MassA) / MassTotal;
-	float MultiplierB = (MassTotal - MassB) / MassTotal;
+	QUADTREE_POSITION_T MassA = QTEntityA->W * QTEntityA->H;
+	QUADTREE_POSITION_T MassB = QTEntityB->W * QTEntityB->H;
+	QUADTREE_POSITION_T MassTotal = MassA + MassB;
+	QUADTREE_POSITION_T MultiplierA = (MassTotal - MassA) / MassTotal;
+	QUADTREE_POSITION_T MultiplierB = (MassTotal - MassB) / MassTotal;
 
 	EntityA->VX += DiffX * MultiplierA;
 	EntityA->VY += DiffY * MultiplierA;
@@ -251,7 +246,7 @@ CollideEntities(
 
 static void
 DrawNode(
-	const QUADTREE* Quadtree,
+	QUADTREE* Quadtree,
 	const QUADTREE_NODE_INFO* Info
 	)
 {
@@ -278,7 +273,7 @@ DrawNode(
 
 static void
 DrawEntity(
-	const QUADTREE* Quadtree,
+	QUADTREE* Quadtree,
 	uint32_t EntityIdx
 	)
 {
@@ -306,14 +301,14 @@ Init(
 	printf(
 		"Simulation settings:\n"
 		"Initial count:    %d\n"
-		"Arena size:       %.01f x %.01f\n"
+		"Arena size:       %.01Lf x %.01Lf\n"
 		"Initial Radius:   From %.01f to %.01f\n"
-		, ITER, Quadtree.W * 2, Quadtree.H * 2, RADIUS_MIN, RADIUS_MAX
+		, ITER, (long double) Quadtree.W * 2, (long double) Quadtree.H * 2, RADIUS_MIN, RADIUS_MAX
 		);
 
 	struct
 	{
-		float X, Y, R;
+		QUADTREE_POSITION_T X, Y, R;
 	}
 	*Rands = malloc(sizeof(*Rands) * ITER);
 	assert(Rands);
@@ -323,7 +318,7 @@ Init(
 		Rands[i].R = RADIUS_MAX;
 		for(int j = 0; j < RADIUS_ITER; ++j)
 		{
-			float Radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * randf();
+			QUADTREE_POSITION_T Radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * randf();
 			if(Radius < Rands[i].R)
 			{
 				Rands[i].R = Radius;
@@ -362,7 +357,7 @@ Init(
 
 static void
 QueryIgnore(
-	const QUADTREE* Quadtree,
+	QUADTREE* Quadtree,
 	uint32_t EntityIndex
 	)
 {
@@ -418,7 +413,9 @@ Tick(
 int
 main()
 {
-	uint64_t Seed = GetTime();
+	DrawInit();
+
+	uint64_t Seed = GetTime() * 100000;
 	printf("Seed: %lu\n", Seed);
 	srand(Seed);
 
@@ -438,8 +435,6 @@ main()
 	QuadtreeInit(&Quadtree);
 
 	Init();
-
-	DrawInit();
 
 	while(1)
 	{

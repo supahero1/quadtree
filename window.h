@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+double
+GetTime(
+	void
+	);
+
 typedef struct VIEW
 {
 	float X, Y, W, H;
@@ -35,7 +40,7 @@ PaintPixel(
 
 extern void
 Clicked(
-	float X, float Y
+	double X, double Y
 	);
 
 extern void

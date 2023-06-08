@@ -1,15 +1,16 @@
-FLAGS = -Ofast -march=native -mtune=native -flto
+FLAGS = -Ofast -march=native -mtune=native -flto -Wall -Wno-unused-function
+LIBS = -lglfw -lGL -lm
 
 .PHONY: build
 build:
-	$(CC) test.c window.c quadtree.c -o test \
-	$(FLAGS) -lglfw -lGL -lm && ./test
+	$(CC) test.c window.c quadtree.c -o test $(FLAGS) $(LIBS)
+	./test
 
 .PHONY: profile
 profile:
-	$(CC) test.c window.c quadtree.c -o test \
-	$(FLAGS) -fprofile-generate -lglfw -lGL -lm && \
-	echo "Close the window after a while to end the profiling session." && \
-	./test && \
-	$(CC) test.c window.c quadtree.c -o test \
-	$(FLAGS) -fprofile-use -lglfw -lGL -lm && ./test
+	$(RM) *.gcda
+	$(CC) test.c window.c quadtree.c -o test $(FLAGS) -fprofile-generate $(LIBS)
+	@echo "Close the window after a while to end the profiling session."
+	./test
+	$(CC) test.c window.c quadtree.c -o test $(FLAGS) -fprofile-use $(LIBS)
+	./test

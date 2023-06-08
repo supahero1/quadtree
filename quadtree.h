@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+typedef float QUADTREE_POSITION_T;
+
 typedef struct QUADTREE_NODE
 {
 	uint32_t Count;
@@ -27,9 +29,11 @@ QUADTREE_NODE_ENTITY;
 
 typedef struct QUADTREE_ENTITY
 {
-	float X, Y, W, H;
+	QUADTREE_POSITION_T X, Y, W, H;
 	uint32_t QueryTick;
-	uint32_t UpdateTick;
+	uint8_t UpdateTick;
+	uint8_t Changed;
+	uint8_t Invalid;
 }
 QUADTREE_ENTITY;
 
@@ -40,7 +44,7 @@ typedef struct QUADTREE_NODE_INFO
 	{
 		struct
 		{
-			float X, Y, W, H;
+			QUADTREE_POSITION_T X, Y, W, H;
 		};
 		uint32_t* ParentIndexSlot;
 	};
@@ -58,19 +62,19 @@ typedef struct QUADTREE QUADTREE;
 
 typedef void
 (*QUADTREE_QUERY_T)(
-	const QUADTREE*,
+	QUADTREE*,
 	uint32_t
 	);
 
 typedef void
 (*QUADTREE_NODE_QUERY_T)(
-	const QUADTREE*,
+	QUADTREE*,
 	const QUADTREE_NODE_INFO*
 	);
 
 typedef void
 (*QUADTREE_COLLIDE_T)(
-	const QUADTREE*,
+	QUADTREE*,
 	uint32_t,
 	uint32_t
 	);
@@ -82,7 +86,7 @@ typedef int
 	uint32_t
 	);
 
-typedef void
+typedef uint8_t
 (*QUADTREE_UPDATE_T)(
 	QUADTREE*,
 	uint32_t
@@ -96,7 +100,7 @@ typedef void
 
 #define QUADTREE_DEDUPE_COLLISIONS 1
 
-/* Do not modify unless you know what you are doing. Use Quadtree.MinSize.*/
+/* Do not modify unless you know what you are doing. Use Quadtree.MinSize. */
 #define QUADTREE_MAX_DEPTH 20
 
 /* Do not modify */
@@ -108,6 +112,7 @@ struct QUADTREE
 	QUADTREE_NODE_ENTITY* NodeEntities;
 	QUADTREE_ENTITY* Entities;
 	QUADTREE_HT_ENTRY* HTEntries;
+	uint32_t* Removals;
 
 	QUADTREE_QUERY_T Query;
 	QUADTREE_NODE_QUERY_T NodeQuery;
@@ -120,11 +125,12 @@ struct QUADTREE
 
 	uint32_t Idx;
 	uint32_t QueryTick;
-	uint32_t UpdateTick;
+	uint8_t UpdateTick;
+	uint32_t PostponeRemovals;
 
-	float X, Y, W, H;
+	QUADTREE_POSITION_T X, Y, W, H;
 
-	float MinSize;
+	QUADTREE_POSITION_T MinSize;
 
 	uint32_t FreeNode;
 	uint32_t NodesUsed;
@@ -141,6 +147,10 @@ struct QUADTREE
 	uint32_t FreeHTEntry;
 	uint32_t HTEntriesUsed;
 	uint32_t HTEntriesSize;
+
+	uint32_t FreeRemoval;
+	uint32_t RemovalsUsed;
+	uint32_t RemovalsSize;
 };
 
 extern void
@@ -173,13 +183,15 @@ QuadtreeUpdate(
 extern void
 QuadtreeQuery(
 	QUADTREE*,
-	float, float, float, float
+	QUADTREE_POSITION_T, QUADTREE_POSITION_T,
+	QUADTREE_POSITION_T, QUADTREE_POSITION_T
 	);
 
 extern void
 QuadtreeQueryNodes(
 	QUADTREE*,
-	float, float, float, float
+	QUADTREE_POSITION_T, QUADTREE_POSITION_T,
+	QUADTREE_POSITION_T, QUADTREE_POSITION_T
 	);
 
 extern void
