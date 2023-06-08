@@ -6,7 +6,7 @@ On my PC at least, it handles 100k entities of varying sizes at around 10-11mspt
 
 Some steps for rookies:
 
-1. Create a `QUADTREE Quadtree` object and call `QuadtreeInit(&Quadtree)` on it. Call `QuadtreeFree(&Quadtree)` to free it after you're done using it.
+1. Create a `QUADTREE Quadtree` object, zero it, and call `QuadtreeInit(&Quadtree)` on it. Call `QuadtreeFree(&Quadtree)` to free it after you're done using it.
 
 2. Set its `Quadtree.Query`, `Quadtree.NodeQuery`, `Quadtree.Collide`, `Quadtree.IsColliding`, and `Quadtree.Update` callbacks as you wish.
 
