@@ -32,7 +32,6 @@ typedef struct QUADTREE_ENTITY
 	QUADTREE_POSITION_T X, Y, W, H;
 	uint32_t QueryTick;
 	uint8_t UpdateTick;
-	uint8_t Changed;
 	uint8_t Invalid;
 }
 QUADTREE_ENTITY;

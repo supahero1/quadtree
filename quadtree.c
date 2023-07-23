@@ -527,7 +527,6 @@ QuadtreeInsert(
 	QTEntity->H = Entity->H;
 	QTEntity->QueryTick = Quadtree->QueryTick;
 	QTEntity->UpdateTick = Quadtree->UpdateTick;
-	QTEntity->Changed = 0;
 	QTEntity->Invalid = 0;
 
 	Quadtree->Idx = Idx;
@@ -692,13 +691,13 @@ QuadtreeUpdate(
 			if(Entity->UpdateTick != Quadtree->UpdateTick)
 			{
 				Entity->UpdateTick = Quadtree->UpdateTick;
-				Entity->Changed = Quadtree->Update(Quadtree, EntityIdx);
+				uint8_t Changed = Quadtree->Update(Quadtree, EntityIdx);
 
 				Node = Quadtree->Nodes + Info.NodeIdx;
 				NodeEntity = Quadtree->NodeEntities + Idx;
 				Entity = Quadtree->Entities + EntityIdx;
 
-				if(Entity->Changed &&
+				if(Changed &&
 					!QuadtreeIsInside(
 						Entity->X, Entity->Y, Entity->W, Entity->H,
 						Info.X, Info.Y, Info.W, Info.H
