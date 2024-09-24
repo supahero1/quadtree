@@ -1,25 +1,22 @@
-#ifndef _quadtree_window_h_
-#define _quadtree_window_h_
+#pragma once
 
-#include <stdint.h>
+#include "quadtree_types.h"
+
 
 double
 GetTime(
 	void
 	);
 
-typedef struct VIEW
-{
-	float X, Y, W, H;
-}
-VIEW;
 
-extern VIEW View;
+extern QuadtreeHalfExtent View;
+
 
 extern void
 SetCameraPos(
 	float X, float Y
 	);
+
 
 typedef struct RECT
 {
@@ -27,10 +24,12 @@ typedef struct RECT
 }
 RECT;
 
+
 extern RECT
 ToScreen(
-	float X, float Y, float W, float H
+	QuadtreeRectExtent Extent
 	);
+
 
 extern void
 PaintPixel(
@@ -38,15 +37,18 @@ PaintPixel(
 	uint32_t Color
 	);
 
+
 extern void
 Clicked(
 	double X, double Y
 	);
 
+
 extern void
 DrawInit(
 	void
 	);
+
 
 enum DRAW_STATE
 {
@@ -54,19 +56,20 @@ enum DRAW_STATE
 	DRAW_STOP
 };
 
+
 extern enum DRAW_STATE
 DrawStart(
 	void
 	);
+
 
 extern void
 DrawEnd(
 	void
 	);
 
+
 extern void
 DrawFree(
 	void
 	);
-
-#endif /* _quadtree_window_h_ */

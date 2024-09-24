@@ -41,9 +41,10 @@ static double TargetFoV = 1;
 static int Pressing = 0;
 static int MouseMoved = 0;
 
-VIEW View = {0};
+QuadtreeHalfExtent View = {0};
 
 static int Error;
+
 
 double
 GetTime(
@@ -52,6 +53,7 @@ GetTime(
 {
 	return glfwGetTime() * 1000.0f;
 }
+
 
 static double
 Lerp(
@@ -62,6 +64,7 @@ Lerp(
 	return Start + (End - Start) * LERP_FACTOR;
 }
 
+
 void
 SetCameraPos(
 	float X, float Y
@@ -71,23 +74,19 @@ SetCameraPos(
 	TargetCamera.Y = Y;
 }
 
+
 RECT
 ToScreen(
-	float X, float Y, float W, float H
+	QuadtreeRectExtent Extent
 	)
 {
-	X = (X - Camera.X) * FoV + WIDTH * 0.5f;
-	Y = (Y - Camera.Y) * FoV + HEIGHT * 0.5f;
-	W *= FoV;
-	H *= FoV;
-
 	RECT Rect =
 	(RECT)
 	{
-		.MinX = X - W + 0.5f,
-		.MinY = Y - H + 0.5f,
-		.MaxX = X + W + 0.5f,
-		.MaxY = Y + H + 0.5f
+		.MinX = (Extent.MinX - Camera.X) * FoV + WIDTH * 0.5f,
+		.MinY = (Extent.MinY - Camera.Y) * FoV + HEIGHT * 0.5f,
+		.MaxX = (Extent.MaxX - Camera.X) * FoV + WIDTH * 0.5f,
+		.MaxY = (Extent.MaxY - Camera.Y) * FoV + HEIGHT * 0.5f
 	};
 
 	Rect.MinX = MAX(-1, MIN(Rect.MinX, WIDTH ));
@@ -98,6 +97,7 @@ ToScreen(
 
 	return Rect;
 }
+
 
 void
 PaintPixel(
@@ -110,6 +110,7 @@ PaintPixel(
 		Pixels[X + Y * WIDTH] = Color;
 	}
 }
+
 
 static void
 MouseButtonCallback(
@@ -143,6 +144,7 @@ MouseButtonCallback(
 	}
 }
 
+
 static void
 MouseMoveCallback(
 	GLFWwindow* Window,
@@ -166,6 +168,7 @@ MouseMoveCallback(
 	}
 }
 
+
 static void
 MouseScrollCallback(
 	GLFWwindow* Window,
@@ -175,6 +178,7 @@ MouseScrollCallback(
 {
 	TargetFoV += OffsetY * SCROLL_FACTOR * TargetFoV;
 }
+
 
 void
 DrawInit(
@@ -195,18 +199,10 @@ DrawInit(
 
 	glfwMakeContextCurrent(Window);
 
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	glOrtho(0, WIDTH, 0, HEIGHT, -1, 1);
-	glMatrixMode(GL_MODELVIEW);
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
 	Pixels = malloc(sizeof(*Pixels) * WIDTH * HEIGHT);
 	assert(Pixels);
 }
+
 
 enum DRAW_STATE
 DrawStart(
@@ -230,7 +226,7 @@ DrawStart(
 		.Y = Lerp(Camera.Y, TargetCamera.Y)
 	};
 	View =
-	(VIEW)
+	(QuadtreeHalfExtent)
 	{
 		.X = Camera.X,
 		.Y = Camera.Y,
@@ -241,7 +237,9 @@ DrawStart(
 	return DRAW_OK;
 }
 
-void DrawEnd(
+
+void
+DrawEnd(
 	void
 	)
 {
@@ -251,14 +249,13 @@ void DrawEnd(
 	glfwSwapBuffers(Window);
 }
 
+
 void
 DrawFree(
 	void
 	)
 {
 	free(Pixels);
-
-	glDisable(GL_BLEND);
 
 	glfwDestroyWindow(Window);
 	glfwTerminate();

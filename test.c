@@ -1,37 +1,45 @@
-#include "window.h"
-#include "quadtree.h"
+#include "quadtree_types.h"
 
-#include <time.h>
-#include <stdio.h>
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-#include <tgmath.h>
-
-#define ITER UINT32_C(100000)
-#define RADIUS_ITER 100
-#define RADIUS_MIN 4.0f
-#define RADIUS_MAX 1000.0f
-#define MIN_SIZE 8.0f
-#define ARENA_WIDTH 65536.0f
-#define ARENA_HEIGHT 65536.0f
-#define MEASURE_TICKS 50
-#define VELOCITY_LOSS 0.9995f
-#define COLLISION_STRENGTH 1.0f
-#define INITIAL_VELOCITY 1.0f
-#define BOUNDS_VELOCITY_LOSS 0.99f
-#define CANT_ESCAPE_AREA 1
 
 typedef struct ENTITY
 {
-	QUADTREE_POSITION_T VX, VY;
+	QuadtreePosition VX, VY;
 }
 ENTITY;
 
-static QUADTREE Quadtree;
-static ENTITY Entities[ITER + 1];
+
+#define QUADTREE_ENTITY_DATA_TYPE ENTITY
+
+
+#include "window.c"
+#include "quadtree.c"
+
+#include <stdio.h>
+#include <assert.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <tgmath.h>
+
+#define ITER UINT32_C(100000)
+#define RADIUS_ODDS 128.0f
+#define RADIUS_MIN 16.0f
+#define RADIUS_MAX 1024.0f
+#define MIN_SIZE 16.0f
+#define ARENA_WIDTH 100000.0f
+#define ARENA_HEIGHT 100000.0f
+#define MEASURE_TICKS 60
+#define VELOCITY_LOSS 1.0f
+#define COLLISION_STRENGTH 1.0f
+#define INITIAL_VELOCITY 2.0f
+#define BOUNDS_VELOCITY_LOSS 0.99f
+#define CANT_ESCAPE_AREA 1
+#define DO_THEM_QUERIES 1
+#define QUERIES_NUM 1000
+
+static Quadtree QT = {0};
 static uint32_t FollowingEntity = -1;
-static QUADTREE_POSITION_T MaxVelocity;
+static QuadtreePosition MaxVelocity;
+static QuadtreePosition TotalVelocity;
 
 static double Start, End;
 static double Time;
@@ -78,18 +86,19 @@ Measure(
 
 static void
 ClickQuery(
-	QUADTREE* Quadtree,
-	uint32_t EntityIdx
+	Quadtree* QT,
+	QuadtreeEntity* Entity
 	)
 {
-	QUADTREE_POSITION_T Velocity = sqrt(
-		Entities[EntityIdx].VX * Entities[EntityIdx].VX +
-		Entities[EntityIdx].VY * Entities[EntityIdx].VY
+	QuadtreePosition Velocity = sqrt(
+		Entity->Data.VX * Entity->Data.VX +
+		Entity->Data.VY * Entity->Data.VY
 		);
+	TotalVelocity += Velocity;
 	if(Velocity > MaxVelocity)
 	{
 		MaxVelocity = Velocity;
-		FollowingEntity = EntityIdx;
+		FollowingEntity = Entity - QT->Entities;
 	}
 }
 
@@ -101,156 +110,162 @@ Clicked(
 {
 	FollowingEntity = -1;
 	MaxVelocity = 0.0f;
-	QUADTREE_QUERY_T OldQuery = Quadtree.Query;
-	Quadtree.Query = ClickQuery;
-	QuadtreeQuery(&Quadtree, X, Y, View.W, View.H);
-	Quadtree.Query = OldQuery;
+	TotalVelocity = 0.0f;
+
+	QuadtreeQuery(&QT, QuadtreeHalfToRectExtent((QuadtreeHalfExtent){ X, Y, View.W, View.H }), ClickQuery);
+	printf("Total velocity: %.02f\n", TotalVelocity);
 }
 
-static uint8_t
+static bool
 UpdateEntity(
-	QUADTREE* Quadtree,
-	uint32_t EntityIdx
+	Quadtree* QT,
+	QuadtreeEntity* Entity
 	)
 {
-	QUADTREE_ENTITY* QTEntity = Quadtree->Entities + EntityIdx;
-	ENTITY* Entity = Entities + EntityIdx;
+	Entity->Data.VX *= VELOCITY_LOSS;
+	Entity->Data.VY *= VELOCITY_LOSS;
 
-	Entity->VX *= VELOCITY_LOSS;
-	Entity->VY *= VELOCITY_LOSS;
-
-	QUADTREE_ENTITY Copy = *QTEntity;
-
-	QTEntity->X += Entity->VX;
-	QTEntity->Y += Entity->VY;
+	Entity->Extent.MinX += Entity->Data.VX;
+	Entity->Extent.MaxX += Entity->Data.VX;
+	Entity->Extent.MinY += Entity->Data.VY;
+	Entity->Extent.MaxY += Entity->Data.VY;
 
 #if CANT_ESCAPE_AREA == 1
-	if(QTEntity->X - QTEntity->W < Quadtree->X - Quadtree->W)
+	if(Entity->Extent.MinX < QT->RectExtent.MinX)
 	{
-		QTEntity->X = Quadtree->X - Quadtree->W + QTEntity->W;
-		Entity->VX = fabs(Entity->VX) * BOUNDS_VELOCITY_LOSS;
+		QuadtreePosition Width = Entity->Extent.MaxX - Entity->Extent.MinX;
+		Entity->Extent.MinX = QT->RectExtent.MinX;
+		Entity->Extent.MaxX = QT->RectExtent.MinX + Width;
+		Entity->Data.VX = fabs(Entity->Data.VX) * BOUNDS_VELOCITY_LOSS;
 	}
-	else if(QTEntity->X + QTEntity->W > Quadtree->X + Quadtree->W)
+	else if(Entity->Extent.MaxX > QT->RectExtent.MaxX)
 	{
-		QTEntity->X = Quadtree->X + Quadtree->W - QTEntity->W;
-		Entity->VX = -fabs(Entity->VX) * BOUNDS_VELOCITY_LOSS;
+		QuadtreePosition Width = Entity->Extent.MaxX - Entity->Extent.MinX;
+		Entity->Extent.MaxX = QT->RectExtent.MaxX;
+		Entity->Extent.MinX = QT->RectExtent.MaxX - Width;
+		Entity->Data.VX = -fabs(Entity->Data.VX) * BOUNDS_VELOCITY_LOSS;
 	}
 
-	if(QTEntity->Y - QTEntity->H < Quadtree->Y - Quadtree->H)
+	if(Entity->Extent.MinY < QT->RectExtent.MinY)
 	{
-		QTEntity->Y = Quadtree->Y - Quadtree->H + QTEntity->H;
-		Entity->VY = fabs(Entity->VY) * BOUNDS_VELOCITY_LOSS;
+		QuadtreePosition Height = Entity->Extent.MaxY - Entity->Extent.MinY;
+		Entity->Extent.MinY = QT->RectExtent.MinY;
+		Entity->Extent.MaxY = QT->RectExtent.MinY + Height;
+		Entity->Data.VY = fabs(Entity->Data.VY) * BOUNDS_VELOCITY_LOSS;
 	}
-	else if(QTEntity->Y + QTEntity->H > Quadtree->X + Quadtree->H)
+	else if(Entity->Extent.MaxY > QT->RectExtent.MaxY)
 	{
-		QTEntity->Y = Quadtree->Y + Quadtree->H - QTEntity->H;
-		Entity->VY = -fabs(Entity->VY) * BOUNDS_VELOCITY_LOSS;
+		QuadtreePosition Height = Entity->Extent.MaxY - Entity->Extent.MinY;
+		Entity->Extent.MaxY = QT->RectExtent.MaxY;
+		Entity->Extent.MinY = QT->RectExtent.MaxY - Height;
+		Entity->Data.VY = -fabs(Entity->Data.VY) * BOUNDS_VELOCITY_LOSS;
 	}
 #else
-	if(QTEntity->X - QTEntity->W < Quadtree->X - Quadtree->W)
+	if(Entity->Extent.MinX < QT->RectExtent.MinX)
 	{
-		Entity->VX *= BOUNDS_VELOCITY_LOSS;
-		++Entity->VX;
+		Entity->Data.VX *= BOUNDS_VELOCITY_LOSS;
+		++Entity->Data.VX;
 	}
-	else if(QTEntity->X + QTEntity->W > Quadtree->X + Quadtree->W)
+	else if(Entity->Extent.MaxX > QT->RectExtent.MaxX)
 	{
-		Entity->VX *= BOUNDS_VELOCITY_LOSS;
-		--Entity->VX;
+		Entity->Data.VX *= BOUNDS_VELOCITY_LOSS;
+		--Entity->Data.VX;
 	}
 
-	if(QTEntity->Y - QTEntity->H < Quadtree->Y - Quadtree->H)
+	if(Entity->Extent.MinY < QT->RectExtent.MinY)
 	{
-		Entity->VY *= BOUNDS_VELOCITY_LOSS;
-		++Entity->VY;
+		Entity->Data.VY *= BOUNDS_VELOCITY_LOSS;
+		++Entity->Data.VY;
 	}
-	else if(QTEntity->Y + QTEntity->H > Quadtree->X + Quadtree->H)
+	else if(Entity->Extent.MaxY > QT->RectExtent.MaxY)
 	{
-		Entity->VY *= BOUNDS_VELOCITY_LOSS;
-		--Entity->VY;
+		Entity->Data.VY *= BOUNDS_VELOCITY_LOSS;
+		--Entity->Data.VY;
 	}
 #endif
 
-	return (Copy.X != QTEntity->X || Copy.Y != QTEntity->Y ||
-		Copy.W != QTEntity->W || Copy.H != QTEntity->H);
-}
-
-static int
-Intersects(
-	QUADTREE_POSITION_T x1, QUADTREE_POSITION_T y1,
-	QUADTREE_POSITION_T w1, QUADTREE_POSITION_T h1,
-
-	QUADTREE_POSITION_T x2, QUADTREE_POSITION_T y2,
-	QUADTREE_POSITION_T w2, QUADTREE_POSITION_T h2
-	)
-{
-	return
-		x1 + w1 >= x2 - w2 &&
-		y1 + h1 >= y2 - h2 &&
-		x2 + w2 >= x1 - w1 &&
-		y2 + h2 >= y1 - h1;
-}
-
-static int
-AreEntitiesColliding(
-	const QUADTREE* Quadtree,
-	uint32_t EntityAIdx,
-	uint32_t EntityBIdx
-	)
-{
-	QUADTREE_ENTITY* EntityA = Quadtree->Entities + EntityAIdx;
-	QUADTREE_ENTITY* EntityB = Quadtree->Entities + EntityBIdx;
-
-	return Intersects(
-		EntityA->X, EntityA->Y, EntityA->W, EntityA->H,
-		EntityB->X, EntityB->Y, EntityB->W, EntityB->H
-	);
+	return true;
 }
 
 static void
 CollideEntities(
-	QUADTREE* Quadtree,
-	uint32_t EntityAIdx,
-	uint32_t EntityBIdx
+	const Quadtree* QT,
+	QuadtreeEntity* EntityA,
+	QuadtreeEntity* EntityB
 	)
 {
-	QUADTREE_ENTITY* QTEntityA = Quadtree->Entities + EntityAIdx;
-	QUADTREE_ENTITY* QTEntityB = Quadtree->Entities + EntityBIdx;
-	ENTITY* EntityA = Entities + EntityAIdx;
-	ENTITY* EntityB = Entities + EntityBIdx;
+	QuadtreeHalfExtent ExtentA = QuadtreeRectToHalfExtent(EntityA->Extent);
+	QuadtreeHalfExtent ExtentB = QuadtreeRectToHalfExtent(EntityB->Extent);
 
-	QUADTREE_POSITION_T DiffX = QTEntityA->X - QTEntityB->X;
-	QUADTREE_POSITION_T DiffY = QTEntityA->Y - QTEntityB->Y;
-	QUADTREE_POSITION_T Length = sqrt(DiffX * DiffX + DiffY * DiffY) / COLLISION_STRENGTH;
-	if(Length == 0)
+	QuadtreePosition DiffX = ExtentA.X - ExtentB.X;
+	QuadtreePosition DiffY = ExtentA.Y - ExtentB.Y;
+	QuadtreePosition OverlapX = (ExtentA.W + ExtentB.W) - fabs(DiffX);
+	QuadtreePosition OverlapY = (ExtentA.H + ExtentB.H) - fabs(DiffY);
+
+	if(OverlapX > 0 && OverlapY > 0)
 	{
-		DiffX = 1;
-		DiffY = 1;
-		Length = 2;
+		QuadtreePosition SizeA = ExtentA.W * ExtentA.H * 4.0f;
+		QuadtreePosition SizeB = ExtentB.W * ExtentB.H * 4.0f;
+		QuadtreePosition TotalSize = SizeA + SizeB;
+
+		if(OverlapX < OverlapY)
+		{
+			QuadtreePosition PushA = OverlapX * (SizeB / TotalSize);
+			QuadtreePosition PushB = OverlapX * (SizeA / TotalSize);
+
+			if(DiffX > 0)
+			{
+				EntityA->Extent.MinX += PushA;
+				EntityA->Extent.MaxX += PushA;
+				EntityB->Extent.MinX -= PushB;
+				EntityB->Extent.MaxX -= PushB;
+			}
+			else
+			{
+				EntityA->Extent.MinX -= PushA;
+				EntityA->Extent.MaxX -= PushA;
+				EntityB->Extent.MinX += PushB;
+				EntityB->Extent.MaxX += PushB;
+			}
+
+			QuadtreePosition TempVX = EntityA->Data.VX;
+			EntityA->Data.VX = (EntityA->Data.VX * (SizeA - SizeB) + 2 * SizeB * EntityB->Data.VX) / TotalSize;
+			EntityB->Data.VX = (EntityB->Data.VX * (SizeB - SizeA) + 2 * SizeA * TempVX) / TotalSize;
+		}
+		else
+		{
+			QuadtreePosition PushA = OverlapY * (SizeB / TotalSize);
+			QuadtreePosition PushB = OverlapY * (SizeA / TotalSize);
+
+			if(DiffY > 0)
+			{
+				EntityA->Extent.MinY += PushA;
+				EntityA->Extent.MaxY += PushA;
+				EntityB->Extent.MinY -= PushB;
+				EntityB->Extent.MaxY -= PushB;
+			}
+			else
+			{
+				EntityA->Extent.MinY -= PushA;
+				EntityA->Extent.MaxY -= PushA;
+				EntityB->Extent.MinY += PushB;
+				EntityB->Extent.MaxY += PushB;
+			}
+
+			QuadtreePosition TempVY = EntityA->Data.VY;
+			EntityA->Data.VY = (EntityA->Data.VY * (SizeA - SizeB) + 2 * SizeB * EntityB->Data.VY) / TotalSize;
+			EntityB->Data.VY = (EntityB->Data.VY * (SizeB - SizeA) + 2 * SizeA * TempVY) / TotalSize;
+		}
 	}
-	Length = 1 / Length;
-	DiffX *= Length;
-	DiffY *= Length;
-
-	QUADTREE_POSITION_T MassA = QTEntityA->W * QTEntityA->H;
-	QUADTREE_POSITION_T MassB = QTEntityB->W * QTEntityB->H;
-	QUADTREE_POSITION_T MassTotal = MassA + MassB;
-	QUADTREE_POSITION_T MultiplierA = (MassTotal - MassA) / MassTotal;
-	QUADTREE_POSITION_T MultiplierB = (MassTotal - MassB) / MassTotal;
-
-	EntityA->VX += DiffX * MultiplierA;
-	EntityA->VY += DiffY * MultiplierA;
-
-	EntityB->VX -= DiffX * MultiplierB;
-	EntityB->VY -= DiffY * MultiplierB;
 }
 
 static void
 DrawNode(
-	QUADTREE* Quadtree,
-	const QUADTREE_NODE_INFO* Info
+	Quadtree* QT,
+	const QuadtreeNodeInfo* Info
 	)
 {
-	RECT Rect = ToScreen(Info->X, Info->Y, Info->W, Info->H);
+	RECT Rect = ToScreen(QuadtreeHalfToRectExtent(Info->Extent));
 
 	for(int X = Rect.MinX; X <= Rect.MaxX; ++X)
 	{
@@ -273,12 +288,11 @@ DrawNode(
 
 static void
 DrawEntity(
-	QUADTREE* Quadtree,
-	uint32_t EntityIdx
+	Quadtree* QT,
+	QuadtreeEntity* Entity
 	)
 {
-	const QUADTREE_ENTITY* Entity = Quadtree->Entities + EntityIdx;
-	RECT Rect = ToScreen(Entity->X, Entity->Y, Entity->W, Entity->H);
+	RECT Rect = ToScreen(Entity->Extent);
 
 	for(int X = Rect.MinX; X <= Rect.MaxX; ++X)
 	{
@@ -293,6 +307,18 @@ DrawEntity(
 	}
 }
 
+float
+GenRadius(
+	void
+	)
+{
+	float R = randf() * RADIUS_ODDS;
+	float Len = RADIUS_MAX - RADIUS_MIN;
+	R = (1.0f / R) * Len + RADIUS_MIN;
+	R = fminf(R, RADIUS_MAX);
+	return R;
+}
+
 static void
 Init(
 	void
@@ -303,51 +329,55 @@ Init(
 		"Initial count:    %d\n"
 		"Arena size:       %.01Lf x %.01Lf\n"
 		"Initial Radius:   From %.01f to %.01f\n"
-		, ITER, (long double) Quadtree.W * 2, (long double) Quadtree.H * 2, RADIUS_MIN, RADIUS_MAX
+		, ITER, (long double) QT.HalfExtent.W * 2, (long double) QT.HalfExtent.H * 2, RADIUS_MIN, RADIUS_MAX
 		);
 
 	struct
 	{
-		QUADTREE_POSITION_T X, Y, R;
-	}
-	*Rands = malloc(sizeof(*Rands) * ITER);
+		QuadtreeRectExtent Extent;
+		ENTITY Entity;
+	} *Rands = malloc(sizeof(*Rands) * ITER);
 	assert(Rands);
 
 	for(int i = 0; i < ITER; ++i)
 	{
-		Rands[i].R = RADIUS_MAX;
-		for(int j = 0; j < RADIUS_ITER; ++j)
-		{
-			QUADTREE_POSITION_T Radius = RADIUS_MIN + (RADIUS_MAX - RADIUS_MIN) * randf();
-			if(Radius < Rands[i].R)
-			{
-				Rands[i].R = Radius;
-			}
-		}
-		Rands[i].X = Quadtree.X - Quadtree.W + Rands[i].R +
-			randf() * (Quadtree.W - Rands[i].R) * 2;
-		Rands[i].Y = Quadtree.Y - Quadtree.H + Rands[i].R +
-			randf() * (Quadtree.H - Rands[i].R) * 2;
-	}
+		float Dim[2];
+		int Idx = i & 1;
 
-	Start = GetTime();
-	for(int i = 0; i < ITER; ++i)
-	{
-		uint32_t Idx = QuadtreeInsert(&Quadtree, &(
-			(QUADTREE_ENTITY)
-			{
-				.X = Rands[i].X,
-				.Y = Rands[i].Y,
-				.W = Rands[i].R,
-				.H = Rands[i].R
-			}
-			));
-		Entities[Idx] =
+		float W = GenRadius();
+		float Temp = GenRadius();
+		float H = W + (Temp - Temp * 0.5f);
+		H = fminf(H, RADIUS_MAX);
+		H = fmaxf(H, RADIUS_MIN);
+
+		Dim[Idx] = W;
+		Dim[!Idx] = H;
+
+		W = Dim[0];
+		H = Dim[1];
+
+		float QTW = QT.HalfExtent.W * 2.0f - W;
+		float QTH = QT.HalfExtent.H * 2.0f - H;
+
+		Rands[i].Extent.MinX = QT.RectExtent.MinX + QTW * randf();
+		Rands[i].Extent.MaxX = Rands[i].Extent.MinX + W;
+
+		Rands[i].Extent.MinY = QT.RectExtent.MinY + QTH * randf();
+		Rands[i].Extent.MaxY = Rands[i].Extent.MinY + H;
+
+		Rands[i].Entity =
 		(ENTITY)
 		{
 			.VX = (1 - 2 * randf()) * INITIAL_VELOCITY,
 			.VY = (1 - 2 * randf()) * INITIAL_VELOCITY
 		};
+	}
+
+	Start = GetTime();
+	for(int i = 0; i < ITER; ++i)
+	{
+		ENTITY* EntityData = QuadtreeInsert(&QT, &Rands[i].Extent);
+		*EntityData = Rands[i].Entity;
 	}
 	End = GetTime();
 	printf("Insertion: %.02lfms\n", End - Start);
@@ -357,12 +387,12 @@ Init(
 
 static void
 QueryIgnore(
-	QUADTREE* Quadtree,
-	uint32_t EntityIndex
+	Quadtree* QT,
+	QuadtreeEntity* Entity
 	)
 {
-	(void) Quadtree;
-	(void) EntityIndex;
+	(void) QT;
+	(void) Entity;
 }
 
 static void
@@ -371,43 +401,40 @@ Tick(
 	)
 {
 	Start = GetTime();
-	QuadtreeCollide(&Quadtree);
+	QuadtreeCollide(&QT, CollideEntities);
 	End = GetTime();
 	Time = Measure(&MeasureCollide, End - Start);
 	if(Time)
 	{
-		printf("Collide: %.02lfms\n", Time);
+		printf("\nCollide: %.02lfms\n", Time);
 	}
 
 	Start = GetTime();
-	QuadtreeUpdate(&Quadtree);
+	QuadtreeUpdate(&QT, UpdateEntity);
 	End = GetTime();
 	Time = Measure(&MeasureUpdate, End - Start);
 	if(Time)
 	{
 		printf("Update: %.02lfms\n", Time);
+		printf("Nodes: %u\n", QT.NodesUsed);
+		printf("Node entities: %u\n", QT.NodeEntitiesUsed);
 	}
 
-	QUADTREE_QUERY_T OldQuery = Quadtree.Query;
-	Quadtree.Query = QueryIgnore;
+#if DO_THEM_QUERIES == 1
 	Start = GetTime();
-	for(int i = 1; i <= 1000; ++i)
+	for(int i = 1; i <= QUERIES_NUM; ++i)
 	{
+		QuadtreeHalfExtent Extent = QuadtreeRectToHalfExtent(QT.Entities[i].Extent);
 		QuadtreeQuery(
-			&Quadtree,
-			Quadtree.Entities[i].X,
-			Quadtree.Entities[i].Y,
-			1920 * 0.5f,
-			1080 * 0.5f
-			);
+			&QT, QuadtreeHalfToRectExtent((QuadtreeHalfExtent){ Extent.X, Extent.Y, 1920 * 0.5f, 1080 * 0.5f }), QueryIgnore);
 	}
 	End = GetTime();
-	Quadtree.Query = OldQuery;
 	Time = Measure(&MeasureQuery, End - Start);
 	if(Time)
 	{
 		printf("1k Queries: %.02lfms\n", Time);
 	}
+#endif
 }
 
 int
@@ -419,20 +446,27 @@ main()
 	printf("Seed: %lu\n", Seed);
 	srand(Seed);
 
-	Quadtree.X = 0;
-	Quadtree.Y = 0;
-	Quadtree.W = ARENA_WIDTH * 0.5f;
-	Quadtree.H = ARENA_HEIGHT * 0.5f;
+	QT.RectExtent =
+	(QuadtreeRectExtent)
+	{
+		.MinX = -ARENA_WIDTH * 0.5f,
+		.MaxX = ARENA_WIDTH * 0.5f,
+		.MinY = -ARENA_HEIGHT * 0.5f,
+		.MaxY = ARENA_HEIGHT * 0.5f
+	};
 
-	Quadtree.Query = DrawEntity;
-	Quadtree.NodeQuery = DrawNode;
-	Quadtree.Update = UpdateEntity;
-	Quadtree.IsColliding = AreEntitiesColliding;
-	Quadtree.Collide = CollideEntities;
+	QT.HalfExtent =
+	(QuadtreeHalfExtent)
+	{
+		.X = 0,
+		.Y = 0,
+		.W = ARENA_WIDTH * 0.5f,
+		.H = ARENA_HEIGHT * 0.5f
+	};
 
-	Quadtree.MinSize = MIN_SIZE;
+	QT.MinSize = MIN_SIZE;
 
-	QuadtreeInit(&Quadtree);
+	QuadtreeInit(&QT);
 
 	Init();
 
@@ -440,7 +474,8 @@ main()
 	{
 		if(FollowingEntity != -1)
 		{
-			SetCameraPos(Quadtree.Entities[FollowingEntity].X, Quadtree.Entities[FollowingEntity].Y);
+			QuadtreeHalfExtent Extent = QuadtreeRectToHalfExtent(QT.Entities[FollowingEntity].Extent);
+			SetCameraPos(Extent.X, Extent.Y);
 		}
 
 		if(DrawStart() != DRAW_OK)
@@ -450,15 +485,17 @@ main()
 
 		Tick();
 
-		QuadtreeQueryNodes(&Quadtree, View.X, View.Y, View.W, View.H);
-		QuadtreeQuery(&Quadtree, View.X, View.Y, View.W, View.H);
+		QuadtreeRectExtent RectView = QuadtreeHalfToRectExtent(View);
+
+		QuadtreeQueryNodes(&QT, RectView, DrawNode);
+		QuadtreeQuery(&QT, RectView, DrawEntity);
 
 		DrawEnd();
 	}
 
 	DrawFree();
 
-	QuadtreeFree(&Quadtree);
+	QuadtreeFree(&QT);
 
 	return 0;
 }

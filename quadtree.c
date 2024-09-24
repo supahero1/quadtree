@@ -5,16 +5,16 @@
 
 static void
 QuadtreeInvalidateNode(
-	QUADTREE_NODE* Node
+	QuadtreeNode* Node
 	)
 {
 	Node->Head = -1;
 }
 
 
-static int
+static bool
 QuadtreeIsNodeInvalid(
-	QUADTREE_NODE* Node
+	QuadtreeNode* Node
 	)
 {
 	return Node->Head == -1;
@@ -23,16 +23,16 @@ QuadtreeIsNodeInvalid(
 
 static void
 QuadtreeInvalidateNodeEntity(
-	QUADTREE_NODE_ENTITY* NodeEntity
+	QuadtreeNodeEntity* NodeEntity
 	)
 {
 	NodeEntity->Entity = 0;
 }
 
 
-static int
+static bool
 QuadtreeIsNodeEntityInvalid(
-	QUADTREE_NODE_ENTITY* NodeEntity
+	QuadtreeNodeEntity* NodeEntity
 	)
 {
 	return NodeEntity->Entity == 0;
@@ -41,16 +41,16 @@ QuadtreeIsNodeEntityInvalid(
 
 static void
 QuadtreeInvalidateEntity(
-	QUADTREE_ENTITY* Entity
+	QuadtreeEntity* Entity
 	)
 {
 	Entity->Invalid = 1;
 }
 
 
-static int
+static bool
 QuadtreeIsEntityInvalid(
-	QUADTREE_ENTITY* Entity
+	QuadtreeEntity* Entity
 	)
 {
 	return Entity->Invalid;
@@ -59,19 +59,19 @@ QuadtreeIsEntityInvalid(
 
 static void
 QuadtreeInvalidateHTEntry(
-	QUADTREE_HT_ENTRY* HTEntry
+	QuadtreeHTEntry* HTEntry
 	)
 {
 	(void) HTEntry;
 }
 
 
-static int
+static bool
 QuadtreeIsHTEntryInvalid(
-	QUADTREE_HT_ENTRY* HTEntry
+	QuadtreeHTEntry* HTEntry
 	)
 {
-	return 0;
+	return false;
 }
 
 
@@ -84,213 +84,179 @@ QuadtreeInvalidateRemoval(
 }
 
 
-static int
+static bool
 QuadtreeIsRemovalInvalid(
 	uint32_t* Removal
 	)
 {
-	return 0;
+	return false;
 }
 
 
-#define QUADTREE_DEF(name, names)										\
+#define Quadtree_DEF(Name, Names)										\
 static void																\
-QuadtreeResize##names (													\
-	QUADTREE* Quadtree													\
+QuadtreeResize##Names (													\
+	Quadtree* QT														\
 	)																	\
 {																		\
-	if(Quadtree-> names##Used >= Quadtree-> names##Size )				\
+	if(QT-> Names##Used >= QT-> Names##Size )							\
 	{																	\
-		Quadtree-> names##Size =										\
-			1 << (32 - __builtin_clz(Quadtree-> names##Used ));			\
-		Quadtree-> names = realloc(										\
-			Quadtree-> names ,											\
-			sizeof(*Quadtree-> names) * Quadtree-> names##Size			\
+		QT-> Names##Size =												\
+			1 << (32 - __builtin_clz(QT-> Names##Used ));				\
+		QT-> Names = realloc(											\
+			QT-> Names ,												\
+			sizeof(*QT-> Names) * QT-> Names##Size						\
 			);															\
 	}																	\
 }																		\
 																		\
 static uint32_t															\
-QuadtreeGet##name (														\
-	QUADTREE* Quadtree													\
+QuadtreeGet##Name (														\
+	Quadtree* QT														\
 	)																	\
 {																		\
-	if(Quadtree-> Free##name )											\
+	if(QT-> Free##Name )												\
 	{																	\
-		uint32_t Ret = Quadtree-> Free##name ;							\
-		Quadtree-> Free##name = *(uint32_t*)&Quadtree-> names [Ret];	\
+		uint32_t Ret = QT-> Free##Name ;								\
+		QT-> Free##Name = *(uint32_t*)&QT-> Names [Ret];				\
 		return Ret;														\
 	}																	\
 																		\
-	QuadtreeResize##names (Quadtree);									\
+	QuadtreeResize##Names (QT);											\
 																		\
-	return Quadtree-> names##Used ++;									\
+	return QT-> Names##Used ++;											\
 }																		\
 																		\
 static void																\
-QuadtreeRet##name (														\
-	QUADTREE* Quadtree,													\
+QuadtreeRet##Name (														\
+	Quadtree* QT,														\
 	uint32_t Idx														\
 	)																	\
 {																		\
-	QuadtreeInvalidate##name (Quadtree-> names + Idx);					\
-	*(uint32_t*)&Quadtree-> names [Idx] = Quadtree-> Free##name ;		\
-	Quadtree-> Free##name = Idx;										\
+	QuadtreeInvalidate##Name (QT-> Names + Idx);						\
+	*(uint32_t*)&QT-> Names [Idx] = QT-> Free##Name ;					\
+	QT-> Free##Name = Idx;												\
 }																		\
 																		\
 static void																\
-QuadtreeReset##names (													\
-	QUADTREE* Quadtree													\
+QuadtreeReset##Names (													\
+	Quadtree* QT														\
 	)																	\
 {																		\
-	Quadtree-> Free##name = 0;											\
-	Quadtree-> names##Used = 1;											\
+	QT-> Free##Name = 0;												\
+	QT-> Names##Used = 1;												\
 }																		\
 																		\
 static void																\
-QuadtreeMaybeShrink##names (											\
-	QUADTREE* Quadtree													\
+QuadtreeMaybeShrink##Names (											\
+	Quadtree* QT														\
 	)																	\
 {																		\
-	if(Quadtree-> names##Used <= (Quadtree-> names##Size >> 2))			\
+	if(QT-> Names##Used <= (QT-> Names##Size >> 2))						\
 	{																	\
-		uint32_t NewSize = Quadtree-> names##Size >> 1;					\
-		void* Pointer = realloc(Quadtree-> names ,						\
-			sizeof(*Quadtree-> names) * NewSize);						\
+		uint32_t NewSize = QT-> Names##Size >> 1;						\
+		void* Pointer = realloc(QT-> Names ,							\
+			sizeof(*QT-> Names) * NewSize);								\
 		if(Pointer)														\
 		{																\
-			Quadtree-> names = Pointer;									\
-			Quadtree-> names##Size = NewSize;							\
+			QT-> Names = Pointer;										\
+			QT-> Names##Size = NewSize;									\
 		}																\
 	}																	\
 }
 
-QUADTREE_DEF(Node, Nodes)
-QUADTREE_DEF(NodeEntity, NodeEntities)
-QUADTREE_DEF(Entity, Entities)
-QUADTREE_DEF(HTEntry, HTEntries)
-QUADTREE_DEF(Removal, Removals)
+Quadtree_DEF(Node, Nodes)
+Quadtree_DEF(NodeEntity, NodeEntities)
+Quadtree_DEF(Entity, Entities)
+Quadtree_DEF(HTEntry, HTEntries)
+Quadtree_DEF(Removal, Removals)
 
-#undef QUADTREE_DEF
+#undef Quadtree_DEF
 
 
 void
 QuadtreeInit(
-	QUADTREE* Quadtree
+	Quadtree* QT
 	)
 {
-#define QUADTREE_INIT(name, names)		\
-	Quadtree-> names##Size = 1;			\
-	QuadtreeReset##names (Quadtree);	\
-	QuadtreeResize##names (Quadtree)
+#define Quadtree_INIT(Name, Names)		\
+	QT-> Names##Size = 1;			\
+	QuadtreeReset##Names (QT);	\
+	QuadtreeResize##Names (QT)
 
-	QUADTREE_INIT(Node, Nodes);
-	QUADTREE_INIT(NodeEntity, NodeEntities);
-	QUADTREE_INIT(Entity, Entities);
-	QUADTREE_INIT(HTEntry, HTEntries);
-	QUADTREE_INIT(Removal, Removals);
+	Quadtree_INIT(Node, Nodes);
+	Quadtree_INIT(NodeEntity, NodeEntities);
+	Quadtree_INIT(Entity, Entities);
+	Quadtree_INIT(HTEntry, HTEntries);
+	Quadtree_INIT(Removal, Removals);
 
-#undef QUADTREE_INIT
+#undef Quadtree_INIT
 
-	Quadtree->Nodes[0].Count = 0;
-	Quadtree->Nodes[0].Head = 0;
-	Quadtree->Nodes[0].PositionFlags = 0b1111; /* TRBL */
+	QT->Nodes[0].Count = 0;
+	QT->Nodes[0].Head = 0;
+	QT->Nodes[0].PositionFlags = 0b1111; /* TRBL */
 }
 
 
 void
 QuadtreeFree(
-	QUADTREE* Quadtree
+	Quadtree* QT
 	)
 {
-#define QUADTREE_FREE(name, names)	\
-	free(Quadtree-> names );		\
-	Quadtree-> names = NULL;		\
-	Quadtree-> names##Used = 0;		\
-	Quadtree-> names##Size = 0;		\
-	Quadtree-> Free##name = 0
+#define Quadtree_FREE(Name, Names)	\
+	free(QT-> Names );		\
+	QT-> Names = NULL;		\
+	QT-> Names##Used = 0;		\
+	QT-> Names##Size = 0;		\
+	QT-> Free##Name = 0
 
-	QUADTREE_FREE(Node, Nodes);
-	QUADTREE_FREE(NodeEntity, NodeEntities);
-	QUADTREE_FREE(Entity, Entities);
-	QUADTREE_FREE(HTEntry, HTEntries);
-	QUADTREE_FREE(Removal, Removals);
+	Quadtree_FREE(Node, Nodes);
+	Quadtree_FREE(NodeEntity, NodeEntities);
+	Quadtree_FREE(Entity, Entities);
+	Quadtree_FREE(HTEntry, HTEntries);
+	Quadtree_FREE(Removal, Removals);
 
-#undef QUADTREE_FREE
-}
-
-
-static int
-QuadtreeIntersects(
-	QUADTREE_POSITION_T x1, QUADTREE_POSITION_T y1,
-	QUADTREE_POSITION_T w1, QUADTREE_POSITION_T h1,
-
-	QUADTREE_POSITION_T x2, QUADTREE_POSITION_T y2,
-	QUADTREE_POSITION_T w2, QUADTREE_POSITION_T h2
-	)
-{
-	return
-		x1 + w1 >= x2 - w2 &&
-		y1 + h1 >= y2 - h2 &&
-		x2 + w2 >= x1 - w1 &&
-		y2 + h2 >= y1 - h1;
-}
-
-
-static int
-QuadtreeIsInside(
-	QUADTREE_POSITION_T x1, QUADTREE_POSITION_T y1,
-	QUADTREE_POSITION_T w1, QUADTREE_POSITION_T h1,
-
-	QUADTREE_POSITION_T x2, QUADTREE_POSITION_T y2,
-	QUADTREE_POSITION_T w2, QUADTREE_POSITION_T h2
-	)
-{
-	return
-		x1 - w1 > x2 - w2 &&
-		y1 - h1 > y2 - h2 &&
-		x2 + w2 > x1 + w1 &&
-		y2 + h2 > y1 + h1;
+#undef Quadtree_FREE
 }
 
 
 static void
 QuadtreePostponeRemovals(
-	QUADTREE* Quadtree
+	Quadtree* QT
 	)
 {
-	++Quadtree->PostponeRemovals;
+	++QT->PostponeRemovals;
 }
 
 
 static void
 QuadtreeDoRemovals(
-	QUADTREE* Quadtree
+	Quadtree* QT
 	)
 {
-	if(--Quadtree->PostponeRemovals != 0)
+	if(--QT->PostponeRemovals != 0)
 	{
 		return;
 	}
 
-	for(uint32_t i = 1; i < Quadtree->RemovalsUsed; ++i)
+	for(uint32_t i = 1; i < QT->RemovalsUsed; ++i)
 	{
-		QuadtreeRemove(Quadtree, Quadtree->Removals[i]);
+		QuadtreeRemove(QT, QT->Removals[i]);
 	}
 
-	QuadtreeResetRemovals(Quadtree);
+	QuadtreeResetRemovals(QT);
 }
 
 
 static void
 QuadtreeReinsertInternal(
-	QUADTREE* Quadtree,
-	QUADTREE_NODE* Node
+	Quadtree* QT,
+	QuadtreeNode* Node
 	)
 {
-	uint32_t Idx = QuadtreeGetNodeEntity(Quadtree);
-	QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Idx;
-	NodeEntity->Entity = Quadtree->Idx;
+	uint32_t Idx = QuadtreeGetNodeEntity(QT);
+	QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Idx;
+	NodeEntity->Entity = QT->Idx;
 	NodeEntity->Next = Node->Head;
 	Node->Head = Idx;
 	++Node->Count;
@@ -299,34 +265,33 @@ QuadtreeReinsertInternal(
 
 static void
 QuadtreeMaybeReinsertInternal(
-	QUADTREE* Quadtree,
-	QUADTREE_NODE* Node,
-	QUADTREE_POSITION_T X, QUADTREE_POSITION_T Y,
-	QUADTREE_POSITION_T W, QUADTREE_POSITION_T H
+	Quadtree* QT,
+	QuadtreeNode* Node,
+	QuadtreeHalfExtent NodeExtent
 	)
 {
-	const QUADTREE_ENTITY* Entity = Quadtree->Entities + Quadtree->Idx;
+	const QuadtreeEntity* Entity = QT->Entities + QT->Idx;
 
-	if(Entity->X - Entity->W <= X)
+	if(Entity->Extent.MinX <= NodeExtent.X)
 	{
-		if(Entity->Y - Entity->H <= Y)
+		if(Entity->Extent.MinY <= NodeExtent.Y)
 		{
-			QuadtreeReinsertInternal(Quadtree, Quadtree->Nodes + Node->Heads[0]);
+			QuadtreeReinsertInternal(QT, QT->Nodes + Node->Heads[0]);
 		}
-		if(Entity->Y + Entity->H >= Y)
+		if(Entity->Extent.MaxY >= NodeExtent.Y)
 		{
-			QuadtreeReinsertInternal(Quadtree, Quadtree->Nodes + Node->Heads[1]);
+			QuadtreeReinsertInternal(QT, QT->Nodes + Node->Heads[1]);
 		}
 	}
-	if(Entity->X + Entity->W >= X)
+	if(Entity->Extent.MaxX >= NodeExtent.X)
 	{
-		if(Entity->Y - Entity->H <= Y)
+		if(Entity->Extent.MinY <= NodeExtent.Y)
 		{
-			QuadtreeReinsertInternal(Quadtree, Quadtree->Nodes + Node->Heads[2]);
+			QuadtreeReinsertInternal(QT, QT->Nodes + Node->Heads[2]);
 		}
-		if(Entity->Y + Entity->H >= Y)
+		if(Entity->Extent.MaxY >= NodeExtent.Y)
 		{
-			QuadtreeReinsertInternal(Quadtree, Quadtree->Nodes + Node->Heads[3]);
+			QuadtreeReinsertInternal(QT, QT->Nodes + Node->Heads[3]);
 		}
 	}
 }
@@ -334,14 +299,12 @@ QuadtreeMaybeReinsertInternal(
 
 static void
 QuadtreeSplit(
-	QUADTREE* Quadtree,
-	uint32_t NodeIdx,
-	QUADTREE_POSITION_T X, QUADTREE_POSITION_T Y,
-	QUADTREE_POSITION_T W, QUADTREE_POSITION_T H
+	Quadtree* Quadtree,
+	QuadtreeNodeInfo Info
 	)
 {
 	uint32_t Idx[4];
-	QUADTREE_NODE* Nodes[4];
+	QuadtreeNode* Nodes[4];
 	for(int i = 0; i < 4; ++i)
 	{
 		Idx[i] = QuadtreeGetNode(Quadtree);
@@ -351,7 +314,7 @@ QuadtreeSplit(
 		Nodes[i] = Quadtree->Nodes + Idx[i];
 	}
 
-	QUADTREE_NODE* Node = Quadtree->Nodes + NodeIdx;
+	QuadtreeNode* Node = Quadtree->Nodes + Info.NodeIdx;
 	uint32_t NodeEntityIdx = Node->Head;
 
 	for(int i = 0; i < 4; ++i)
@@ -359,23 +322,25 @@ QuadtreeSplit(
 		Nodes[i]->Count = 0;
 		Nodes[i]->Head = 0;
 	}
+
 	Nodes[0]->PositionFlags = Node->PositionFlags & 0b0011;
 	Nodes[1]->PositionFlags = Node->PositionFlags & 0b1001;
 	Nodes[2]->PositionFlags = Node->PositionFlags & 0b0110;
 	Nodes[3]->PositionFlags = Node->PositionFlags & 0b1100;
+
 	for(int i = 0; i < 4; ++i)
 	{
 		Node->Heads[i] = Idx[i];
 	}
 
 	uint32_t IdxSave = Quadtree->Idx;
-	for(int i = 0; i < Node->Count; ++i)
+	while(NodeEntityIdx)
 	{
-		QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + NodeEntityIdx;
+		QuadtreeNodeEntity* NodeEntity = Quadtree->NodeEntities + NodeEntityIdx;
 		Quadtree->Idx = NodeEntity->Entity;
 		uint32_t NextIdx = NodeEntity->Next;
 		QuadtreeRetNodeEntity(Quadtree, NodeEntityIdx);
-		QuadtreeMaybeReinsertInternal(Quadtree, Node, X, Y, W, H);
+		QuadtreeMaybeReinsertInternal(Quadtree, Node, Info.Extent);
 		NodeEntityIdx = NextIdx;
 	}
 	Quadtree->Idx = IdxSave;
@@ -384,56 +349,81 @@ QuadtreeSplit(
 }
 
 
-#define QUADTREE_DESCEND(_X, _Y, _W, _H)									\
+#define QuadtreeDescend(_Extent)											\
 do																			\
 {																			\
-	QUADTREE_POSITION_T InfoW = Info.W * 0.5f;								\
-	QUADTREE_POSITION_T InfoH = Info.H * 0.5f;								\
-	if(_X - _W <= Info.X)													\
+	QuadtreePosition HalfW = Info.Extent.W * 0.5f;							\
+	QuadtreePosition HalfH = Info.Extent.H * 0.5f;							\
+																			\
+	if(_Extent.MinX <= Info.Extent.X)										\
 	{																		\
-		if(_Y - _H <= Info.Y)												\
-			NodeInfos[NodeInfosUsed++] =									\
-			(QUADTREE_NODE_INFO)											\
+		if(_Extent.MinY <= Info.Extent.Y)									\
+		{																	\
+			*(NodeInfo++) =													\
+			(QuadtreeNodeInfo)												\
 			{																\
 				.NodeIdx = Node->Heads[0],									\
-				.X = Info.X - InfoW,										\
-				.Y = Info.Y - InfoH,										\
-				.W = InfoW,													\
-				.H = InfoH													\
+				.Extent =													\
+				(QuadtreeHalfExtent)										\
+				{															\
+					.X = Info.Extent.X - HalfW,								\
+					.Y = Info.Extent.Y - HalfH,								\
+					.W = HalfW,												\
+					.H = HalfH												\
+				}															\
 			};																\
-		if(_Y + _H >= Info.Y)												\
-			NodeInfos[NodeInfosUsed++] =									\
-			(QUADTREE_NODE_INFO)											\
+		}																	\
+		if(_Extent.MaxY >= Info.Extent.Y)									\
+		{																	\
+			*(NodeInfo++) =													\
+			(QuadtreeNodeInfo)												\
 			{																\
 				.NodeIdx = Node->Heads[1],									\
-				.X = Info.X - InfoW,										\
-				.Y = Info.Y + InfoH,										\
-				.W = InfoW,													\
-				.H = InfoH													\
+				.Extent =													\
+				(QuadtreeHalfExtent)										\
+				{															\
+					.X = Info.Extent.X - HalfW,								\
+					.Y = Info.Extent.Y + HalfH,								\
+					.W = HalfW,												\
+					.H = HalfH												\
+				}															\
 			};																\
+		}																	\
 	}																		\
-	if(_X + _W >= Info.X)													\
+	if(_Extent.MaxX >= Info.Extent.X)										\
 	{																		\
-		if(_Y - _H <= Info.Y)												\
-			NodeInfos[NodeInfosUsed++] =									\
-			(QUADTREE_NODE_INFO)											\
+		if(_Extent.MinY <= Info.Extent.Y)									\
+		{																	\
+			*(NodeInfo++) =													\
+			(QuadtreeNodeInfo)												\
 			{																\
 				.NodeIdx = Node->Heads[2],									\
-				.X = Info.X + InfoW,										\
-				.Y = Info.Y - InfoH,										\
-				.W = InfoW,													\
-				.H = InfoH													\
+				.Extent =													\
+				(QuadtreeHalfExtent)										\
+				{															\
+					.X = Info.Extent.X + HalfW,								\
+					.Y = Info.Extent.Y - HalfH,								\
+					.W = HalfW,												\
+					.H = HalfH												\
+				}															\
 			};																\
-		if(_Y + _H >= Info.Y)												\
-			NodeInfos[NodeInfosUsed++] =									\
-			(QUADTREE_NODE_INFO)											\
+		}																	\
+		if(_Extent.MaxY >= Info.Extent.Y)									\
+		{																	\
+			*(NodeInfo++) =													\
+			(QuadtreeNodeInfo)												\
 			{																\
 				.NodeIdx = Node->Heads[3],									\
-				.X = Info.X + InfoW,										\
-				.Y = Info.Y + InfoH,										\
-				.W = InfoW,													\
-				.H = InfoH													\
+				.Extent =													\
+				(QuadtreeHalfExtent)										\
+				{															\
+					.X = Info.Extent.X + HalfW,								\
+					.Y = Info.Extent.Y + HalfH,								\
+					.W = HalfW,												\
+					.H = HalfH												\
+				}															\
 			};																\
+		}																	\
 	}																		\
 }																			\
 while(0)
@@ -441,45 +431,42 @@ while(0)
 
 static void
 QuadtreeReinsert(
-	QUADTREE* Quadtree,
+	Quadtree* QT,
 	uint32_t EntityIdx
 	)
 {
-	const QUADTREE_ENTITY* Entity = Quadtree->Entities + EntityIdx;
-	Quadtree->Idx = EntityIdx;
+	const QuadtreeEntity* Entity = QT->Entities + EntityIdx;
+	QT->Idx = EntityIdx;
 
-	uint32_t NodeInfosUsed = 1;
-	QUADTREE_NODE_INFO NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo* NodeInfo = NodeInfos;
 
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
+	*(NodeInfo++) =
+	(QuadtreeNodeInfo)
 	{
 		.NodeIdx = 0,
-		.X = Quadtree->X,
-		.Y = Quadtree->Y,
-		.W = Quadtree->W,
-		.H = Quadtree->H
+		.Extent = QT->HalfExtent
 	};
 
-	while(NodeInfosUsed)
+	do
 	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
+		QuadtreeNodeInfo Info = *(--NodeInfo);
 		goto_insert:;
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
 
 		if(Node->Count == -1)
 		{
-			QUADTREE_DESCEND(Entity->X, Entity->Y, Entity->W, Entity->H);
+			QuadtreeDescend(Entity->Extent);
 			continue;
 		}
 
 		if(!Node->Head)
 		{
-			QuadtreeReinsertInternal(Quadtree, Node);
+			QuadtreeReinsertInternal(QT, Node);
 			continue;
 		}
 
-		const QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Node->Head;
+		const QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Node->Head;
 
 		while(1)
 		{
@@ -491,135 +478,128 @@ QuadtreeReinsert(
 			{
 				break;
 			}
-			NodeEntity = Quadtree->NodeEntities + NodeEntity->Next;
+			NodeEntity = QT->NodeEntities + NodeEntity->Next;
 		}
 
 		if(
 			Node->Count < QUADTREE_SPLIT_THRESHOLD ||
-			Info.W <= Quadtree->MinSize || Info.H <= Quadtree->MinSize
+			Info.Extent.W <= QT->MinSize || Info.Extent.H <= QT->MinSize
 			)
 		{
-			QuadtreeReinsertInternal(Quadtree, Node);
+			QuadtreeReinsertInternal(QT, Node);
 		}
 		else
 		{
-			QuadtreeSplit(Quadtree, Info.NodeIdx, Info.X, Info.Y, Info.W, Info.H);
+			QuadtreeSplit(QT, Info);
 
 			goto goto_insert;
 		}
 
 		goto_skip:;
 	}
+	while(NodeInfo != NodeInfos);
 }
 
 
-uint32_t
+QUADTREE_ENTITY_DATA_TYPE*
 QuadtreeInsert(
-	QUADTREE* Quadtree,
-	const QUADTREE_ENTITY* Entity
+	Quadtree* QT,
+	const QuadtreeRectExtent* Extent
 	)
 {
-	const uint32_t Idx = QuadtreeGetEntity(Quadtree);
-	QUADTREE_ENTITY* QTEntity = Quadtree->Entities + Idx;
-	QTEntity->X = Entity->X;
-	QTEntity->Y = Entity->Y;
-	QTEntity->W = Entity->W;
-	QTEntity->H = Entity->H;
-	QTEntity->QueryTick = Quadtree->QueryTick;
-	QTEntity->UpdateTick = Quadtree->UpdateTick;
-	QTEntity->Invalid = 0;
+	const uint32_t Idx = QuadtreeGetEntity(QT);
+	QuadtreeEntity* Entity = QT->Entities + Idx;
+	Entity->Extent = *Extent;
+	Entity->QueryTick = QT->QueryTick;
+	Entity->UpdateTick = QT->UpdateTick;
+	Entity->Invalid = 0;
 
-	Quadtree->Idx = Idx;
+	QT->Idx = Idx;
 
-	uint32_t NodeInfosUsed = 1;
-	QUADTREE_NODE_INFO NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo* NodeInfo = NodeInfos;
 
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
+	*(NodeInfo++) =
+	(QuadtreeNodeInfo)
 	{
 		.NodeIdx = 0,
-		.X = Quadtree->X,
-		.Y = Quadtree->Y,
-		.W = Quadtree->W,
-		.H = Quadtree->H
+		.Extent = QT->HalfExtent
 	};
 
-	while(NodeInfosUsed)
+	do
 	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
+		QuadtreeNodeInfo Info = *(--NodeInfo);
 		goto_insert:;
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
 
 		if(Node->Count == -1)
 		{
-			QUADTREE_DESCEND(Entity->X, Entity->Y, Entity->W, Entity->H);
+			QuadtreeDescend(Entity->Extent);
 			continue;
 		}
 
 		if(
 			Node->Count < QUADTREE_SPLIT_THRESHOLD ||
-			Info.W <= Quadtree->MinSize || Info.H <= Quadtree->MinSize
+			Info.Extent.W <= QT->MinSize || Info.Extent.H <= QT->MinSize
 			)
 		{
-			QuadtreeReinsertInternal(Quadtree, Node);
+			QuadtreeReinsertInternal(QT, Node);
 		}
 		else
 		{
-			QuadtreeSplit(Quadtree, Info.NodeIdx, Info.X, Info.Y, Info.W, Info.H);
+			QuadtreeSplit(QT, Info);
 
 			goto goto_insert;
 		}
 	}
+	while(NodeInfo != NodeInfos);
 
-	return Idx;
+	return &Entity->Data;
 }
 
 
 void
 QuadtreeRemove(
-	QUADTREE* Quadtree,
+	Quadtree* QT,
 	uint32_t EntityIdx
 	)
 {
-	QUADTREE_ENTITY* Entity = Quadtree->Entities + EntityIdx;
+	QuadtreeEntity* Entity = QT->Entities + EntityIdx;
 
-	if(Quadtree->PostponeRemovals)
+	if(QT->PostponeRemovals)
 	{
-		uint32_t Idx = QuadtreeGetRemoval(Quadtree);
-		Quadtree->Removals[Idx] = EntityIdx;
+		uint32_t Idx = QuadtreeGetRemoval(QT);
+		QT->Removals[Idx] = EntityIdx;
 		return;
 	}
 
-	uint32_t NodeInfosUsed = 1;
-	QUADTREE_NODE_INFO NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo* NodeInfo = NodeInfos;
 
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
+	*(NodeInfo++) =
+	(QuadtreeNodeInfo)
 	{
 		.NodeIdx = 0,
-		.X = Quadtree->X,
-		.Y = Quadtree->Y,
-		.W = Quadtree->W,
-		.H = Quadtree->H
+		.Extent = QT->HalfExtent
 	};
 
-	while(NodeInfosUsed)
+	do
 	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		QuadtreeNodeInfo Info = *(--NodeInfo);
+		QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
 
 		if(Node->Count == -1)
 		{
-			QUADTREE_DESCEND(Entity->X, Entity->Y, Entity->W, Entity->H);
+			QuadtreeDescend(Entity->Extent);
 			continue;
 		}
 
 		uint32_t Idx = Node->Head;
-		QUADTREE_NODE_ENTITY* PrevNodeEntity = NULL;
+		QuadtreeNodeEntity* PrevNodeEntity = NULL;
 
 		while(1)
 		{
-			QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Idx;
+			QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Idx;
 			if(NodeEntity->Entity == EntityIdx)
 			{
 				if(PrevNodeEntity)
@@ -631,421 +611,444 @@ QuadtreeRemove(
 					Node->Head = NodeEntity->Next;
 				}
 				--Node->Count;
-				QuadtreeRetNodeEntity(Quadtree, Idx);
+				QuadtreeRetNodeEntity(QT, Idx);
 				break;
 			}
 			PrevNodeEntity = NodeEntity;
 			Idx = NodeEntity->Next;
 		}
 	}
+	while(NodeInfo != NodeInfos);
 
-	QuadtreeRetEntity(Quadtree, EntityIdx);
+	QuadtreeRetEntity(QT, EntityIdx);
 }
-
+// todo qt->nodes is getting  reloaded everytime loop runs, cache it
 
 void
 QuadtreeUpdate(
-	QUADTREE* Quadtree
+	Quadtree* QT,
+	QuadtreeUpdateT Callback
 	)
 {
-	Quadtree->UpdateTick ^= 1;
-	QuadtreePostponeRemovals(Quadtree);
-
-	uint32_t NodeInfosUsed = 1;
-	QUADTREE_NODE_INFO NodeInfos[QUADTREE_DFS_LENGTH];
-
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
 	{
-		.NodeIdx = 0,
-		.X = Quadtree->X,
-		.Y = Quadtree->Y,
-		.W = Quadtree->W,
-		.H = Quadtree->H
-	};
+		QT->UpdateTick ^= 1;
+		QuadtreePostponeRemovals(QT);
 
-	while(NodeInfosUsed)
-	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		QuadtreeNodeInfo NodeInfos[QUADTREE_DFS_LENGTH];
+		QuadtreeNodeInfo* NodeInfo = NodeInfos;
 
-		if(Node->Count == -1)
+		*(NodeInfo++) =
+		(QuadtreeNodeInfo)
 		{
-			QUADTREE_DESCEND(Info.X, Info.Y, 0, 0);
-			continue;
-		}
+			.NodeIdx = 0,
+			.Extent = QT->HalfExtent
+		};
 
-		if(!Node->Head)
+		do
 		{
-			continue;
-		}
+			QuadtreeNodeInfo Info = *(--NodeInfo);
+			QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
 
-		uint32_t Idx = Node->Head;
-		uint32_t PrevIdx = 0;
-		while(1)
-		{
-			QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Idx;
-			uint32_t EntityIdx = NodeEntity->Entity;
-			QUADTREE_ENTITY* Entity = Quadtree->Entities + EntityIdx;
-
-			if(Entity->UpdateTick != Quadtree->UpdateTick)
+			if(Node->Count == -1)
 			{
-				Entity->UpdateTick = Quadtree->UpdateTick;
-				uint8_t Changed = Quadtree->Update(Quadtree, EntityIdx);
-
-				Node = Quadtree->Nodes + Info.NodeIdx;
-				NodeEntity = Quadtree->NodeEntities + Idx;
-				Entity = Quadtree->Entities + EntityIdx;
-
-				if(Changed &&
-					!QuadtreeIsInside(
-						Entity->X, Entity->Y, Entity->W, Entity->H,
-						Info.X, Info.Y, Info.W, Info.H
-					))
-				{
-					QuadtreeReinsert(Quadtree, EntityIdx);
-					Node = Quadtree->Nodes + Info.NodeIdx;
-					NodeEntity = Quadtree->NodeEntities + Idx;
-				}
-			}
-
-			if(
-				(Entity->X + Entity->W < Info.X - Info.W && !(Node->PositionFlags & 0b0001)) ||
-				(Entity->Y + Entity->H < Info.Y - Info.H && !(Node->PositionFlags & 0b0010)) ||
-				(Info.X + Info.W < Entity->X - Entity->W && !(Node->PositionFlags & 0b0100)) ||
-				(Info.Y + Info.H < Entity->Y - Entity->H && !(Node->PositionFlags & 0b1000))
-				)
-			{
-				if(PrevIdx)
-				{
-					Quadtree->NodeEntities[PrevIdx].Next = NodeEntity->Next;
-				}
-				else
-				{
-					Node->Head = NodeEntity->Next;
-				}
-				--Node->Count;
-				uint32_t NextIdx = NodeEntity->Next;
-				QuadtreeRetNodeEntity(Quadtree, Idx);
-				Idx = NextIdx;
-				if(!Idx)
-				{
-					break;
-				}
+				QuadtreeDescend(((QuadtreeRectExtent){ Info.Extent.X, Info.Extent.X, Info.Extent.Y, Info.Extent.Y }));
 				continue;
 			}
 
-			if(!NodeEntity->Next)
+			if(!Node->Head)
 			{
-				break;
+				continue;
 			}
-			PrevIdx = Idx;
-			Idx = NodeEntity->Next;
+
+			QuadtreeRectExtent Extent = QuadtreeHalfToRectExtent(Info.Extent);
+
+			uint32_t Idx = Node->Head;
+			uint32_t PrevIdx = 0;
+			while(1)
+			{
+				QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Idx;
+				uint32_t EntityIdx = NodeEntity->Entity;
+				QuadtreeEntity* Entity = QT->Entities + EntityIdx;
+
+				if(Entity->UpdateTick != QT->UpdateTick)
+				{
+					Entity->UpdateTick = QT->UpdateTick;
+					uint8_t Changed = Callback(QT, Entity);
+
+					Node = QT->Nodes + Info.NodeIdx;
+					NodeEntity = QT->NodeEntities + Idx;
+					Entity = QT->Entities + EntityIdx;
+
+					if(Changed &&!QuadtreeIsInside(Entity->Extent, Extent))
+					{
+						QuadtreeReinsert(QT, EntityIdx);
+						Node = QT->Nodes + Info.NodeIdx;
+						NodeEntity = QT->NodeEntities + Idx;
+					}
+				}
+
+				if(
+					(Entity->Extent.MaxX < Extent.MinX && !(Node->PositionFlags & 0b0001)) ||
+					(Entity->Extent.MaxY < Extent.MinY && !(Node->PositionFlags & 0b0010)) ||
+					(Extent.MaxX < Entity->Extent.MinX && !(Node->PositionFlags & 0b0100)) ||
+					(Extent.MaxY < Entity->Extent.MinY && !(Node->PositionFlags & 0b1000))
+					)
+				{
+					if(PrevIdx)
+					{
+						QT->NodeEntities[PrevIdx].Next = NodeEntity->Next;
+					}
+					else
+					{
+						Node->Head = NodeEntity->Next;
+					}
+					--Node->Count;
+					uint32_t NextIdx = NodeEntity->Next;
+					QuadtreeRetNodeEntity(QT, Idx);
+					Idx = NextIdx;
+					if(!Idx)
+					{
+						break;
+					}
+					continue;
+				}
+
+				if(!NodeEntity->Next)
+				{
+					break;
+				}
+				PrevIdx = Idx;
+				Idx = NodeEntity->Next;
+			}
 		}
+		while(NodeInfo != NodeInfos);
+
+		QuadtreeDoRemovals(QT);
 	}
 
-	QuadtreeDoRemovals(Quadtree);
-
-	NodeInfosUsed = 1;
-	NodeInfos[0].NodeIdx = 0;
-
-	while(NodeInfosUsed)
 	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		uint32_t NodeInfos[QUADTREE_DFS_LENGTH];
+		uint32_t* NodeInfo = NodeInfos;
 
-		if(Node->Count != -1)
-		{
-			continue;
-		}
+		*(NodeInfo++) = 0;
 
-		QUADTREE_NODE* Children[4];
-		for(int i = 0; i < 4; ++i)
+		do
 		{
-			Children[i] = Quadtree->Nodes + Node->Heads[i];
-		}
-		uint32_t Total = 0;
-		int Possible = 1;
+			uint32_t NodeIdx = *(--NodeInfo);
+			QuadtreeNode* Node = QT->Nodes + NodeIdx;
 
-		for(int i = 0; i < 4; ++i)
-		{
-			if(Children[i]->Count == -1)
+			if(Node->Count != -1)
 			{
-				NodeInfos[NodeInfosUsed++].NodeIdx = Node->Heads[i];
-				Possible = 0;
+				continue;
 			}
-			else
+
+			QuadtreeNode* Children[4];
+			for(int i = 0; i < 4; ++i)
 			{
-				Total += Children[i]->Count;
+				Children[i] = QT->Nodes + Node->Heads[i];
 			}
-		}
+			uint32_t Total = 0;
+			int Possible = 1;
 
-		if(!Possible || Total > QUADTREE_SPLIT_THRESHOLD)
-		{
-			continue;
-		}
-
-		uint32_t Heads[4];
-		for(int i = 0; i < 4; ++i)
-		{
-			Heads[i] = Node->Heads[i];
-		}
-		Node->Head = Children[0]->Head;
-		Node->Count = Children[0]->Count;
-		Node->PositionFlags = Children[0]->PositionFlags;
-
-		for(int i = 1; i < 4; ++i)
-		{
-			Node->PositionFlags |= Children[i]->PositionFlags;
-			uint32_t Idx = Children[i]->Head;
-			while(Idx)
+			for(int i = 0; i < 4; ++i)
 			{
-				QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Idx;
-
-				if(!Node->Head)
+				if(Children[i]->Count == -1)
 				{
-					Node->Head = Idx;
-					Node->Count = 1;
-					Idx = NodeEntity->Next;
-					NodeEntity->Next = 0;
+					*(NodeInfo++) = Node->Heads[i];
+					Possible = 0;
 				}
 				else
 				{
-					uint32_t Idx2 = Node->Head;
-					while(1)
+					Total += Children[i]->Count;
+				}
+			}
+
+			if(!Possible || Total > QUADTREE_SPLIT_THRESHOLD)
+			{
+				continue;
+			}
+
+			uint32_t Heads[4];
+			for(int i = 0; i < 4; ++i)
+			{
+				Heads[i] = Node->Heads[i];
+			}
+			Node->Head = Children[0]->Head;
+			Node->Count = Children[0]->Count;
+			Node->PositionFlags = Children[0]->PositionFlags;
+
+			for(int i = 1; i < 4; ++i)
+			{
+				Node->PositionFlags |= Children[i]->PositionFlags;
+				uint32_t Idx = Children[i]->Head;
+				while(Idx)
+				{
+					QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Idx;
+
+					if(!Node->Head)
 					{
-						QUADTREE_NODE_ENTITY* NodeEntity2 = Quadtree->NodeEntities + Idx2;
-
-						if(NodeEntity->Entity == NodeEntity2->Entity)
+						Node->Head = Idx;
+						Node->Count = 1;
+						Idx = NodeEntity->Next;
+						NodeEntity->Next = 0;
+					}
+					else
+					{
+						uint32_t Idx2 = Node->Head;
+						while(1)
 						{
-							uint32_t SaveIdx = Idx;
-							Idx = NodeEntity->Next;
-							QuadtreeRetNodeEntity(Quadtree, SaveIdx);
-							break;
+							QuadtreeNodeEntity* NodeEntity2 = QT->NodeEntities + Idx2;
+
+							if(NodeEntity->Entity == NodeEntity2->Entity)
+							{
+								uint32_t SaveIdx = Idx;
+								Idx = NodeEntity->Next;
+								QuadtreeRetNodeEntity(QT, SaveIdx);
+								break;
+							}
+
+							if(!NodeEntity2->Next)
+							{
+								uint32_t SaveIdx = Idx;
+								Idx = NodeEntity->Next;
+
+								NodeEntity2->Next = SaveIdx;
+								NodeEntity->Next = 0;
+
+								++Node->Count;
+								break;
+							}
+							Idx2 = NodeEntity2->Next;
 						}
-
-						if(!NodeEntity2->Next)
-						{
-							uint32_t SaveIdx = Idx;
-							Idx = NodeEntity->Next;
-
-							NodeEntity2->Next = SaveIdx;
-							NodeEntity->Next = 0;
-
-							++Node->Count;
-							break;
-						}
-						Idx2 = NodeEntity2->Next;
 					}
 				}
 			}
-		}
 
-		for(int i = 0; i < 4; ++i)
-		{
-			QuadtreeRetNode(Quadtree, Heads[i]);
-		}
-	}
-
-	QUADTREE_NODE_ENTITY* NodeEntities = malloc(sizeof(*NodeEntities) * Quadtree->NodeEntitiesSize);
-	uint32_t NodeEntityIdx = 1;
-
-	QUADTREE_NODE* Nodes = malloc(sizeof(*Nodes) * Quadtree->NodesSize);
-	uint32_t NodeIdx = 0;
-
-	NodeInfosUsed = 1;
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
-	{
-		.NodeIdx = 0,
-		.ParentIndexSlot = NULL
-	};
-
-	while(NodeInfosUsed)
-	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
-		uint32_t NewNodeIdx = NodeIdx++;
-		QUADTREE_NODE* NewNode = Nodes + NewNodeIdx;
-
-		if(Info.ParentIndexSlot)
-		{
-			*Info.ParentIndexSlot = NewNodeIdx;
-		}
-
-		if(Node->Count == -1)
-		{
 			for(int i = 0; i < 4; ++i)
 			{
-				NodeInfos[NodeInfosUsed++] =
-				(QUADTREE_NODE_INFO)
-				{
-					.NodeIdx = Node->Heads[i],
-					.ParentIndexSlot = &NewNode->Heads[i]
-				};
-			}
-			NewNode->Count = -1;
-			continue;
-		}
-
-		NewNode->PositionFlags = Node->PositionFlags;
-
-		if(!Node->Head)
-		{
-			NewNode->Head = 0;
-			NewNode->Count = 0;
-
-			continue;
-		}
-
-		QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Node->Head;
-		NewNode->Head = NodeEntityIdx;
-		NewNode->Count = Node->Count;
-
-		while(1)
-		{
-			QUADTREE_NODE_ENTITY* NewNodeEntity = NodeEntities + NodeEntityIdx;
-
-			NewNodeEntity->Entity = NodeEntity->Entity;
-			++NodeEntityIdx;
-
-			if(NodeEntity->Next)
-			{
-				NodeEntity = Quadtree->NodeEntities + NodeEntity->Next;
-				NewNodeEntity->Next = NodeEntityIdx;
-			}
-			else
-			{
-				NewNodeEntity->Next = 0;
-				break;
+				QuadtreeRetNode(QT, Heads[i]);
 			}
 		}
+		while(NodeInfo != NodeInfos);
 	}
 
-	free(Quadtree->Nodes);
-	Quadtree->Nodes = Nodes;
-	Quadtree->NodesUsed = NodeIdx;
-	Quadtree->FreeNode = 0;
+	{// todo here first shrink sizes but not arrays then use the shrunken sizes here
+		QuadtreeEntity* Entities = malloc(sizeof(*Entities) * QT->EntitiesSize);
+		uint32_t EntityIdx = 1;
 
-	free(Quadtree->NodeEntities);
-	Quadtree->NodeEntities = NodeEntities;
-	Quadtree->NodeEntitiesUsed = NodeEntityIdx;
-	Quadtree->FreeNodeEntity = 0;
+		uint32_t* EntityMap = calloc(QT->EntitiesSize, sizeof(*EntityMap));
 
-	QuadtreeMaybeShrinkNodes(Quadtree);
-	QuadtreeMaybeShrinkNodeEntities(Quadtree);
-	QuadtreeMaybeShrinkEntities(Quadtree);
-	QuadtreeMaybeShrinkHTEntries(Quadtree);
-	QuadtreeMaybeShrinkRemovals(Quadtree);
+		QuadtreeNodeEntity* NodeEntities = malloc(sizeof(*NodeEntities) * QT->NodeEntitiesSize);
+		uint32_t NodeEntityIdx = 1;
+
+		QuadtreeNode* Nodes = malloc(sizeof(*Nodes) * QT->NodesSize);
+		uint32_t NodeIdx = 0;
+
+		typedef struct QuadtreeNodeReorderInfo
+		{
+			uint32_t NodeIdx;
+			uint32_t* ParentIndexSlot;
+		}
+		QuadtreeNodeReorderInfo;
+
+		QuadtreeNodeReorderInfo NodeInfos[QUADTREE_DFS_LENGTH];
+		QuadtreeNodeReorderInfo* NodeInfo = NodeInfos;
+
+		*(NodeInfo++) =
+		(QuadtreeNodeReorderInfo)
+		{
+			.NodeIdx = 0,
+			.ParentIndexSlot = NULL
+		};
+
+		do
+		{
+			QuadtreeNodeReorderInfo Info = *(--NodeInfo);
+			QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
+			uint32_t NewNodeIdx = NodeIdx++;
+			QuadtreeNode* NewNode = Nodes + NewNodeIdx;
+
+			if(Info.ParentIndexSlot)
+			{
+				*Info.ParentIndexSlot = NewNodeIdx;
+			}
+
+			if(Node->Count == -1)
+			{
+				for(int i = 0; i < 4; ++i)
+				{
+					*(NodeInfo++) =
+					(QuadtreeNodeReorderInfo)
+					{
+						.NodeIdx = Node->Heads[i],
+						.ParentIndexSlot = &NewNode->Heads[i]
+					};
+				}
+				NewNode->Count = -1;
+				continue;
+			}
+
+			NewNode->PositionFlags = Node->PositionFlags;
+
+			if(!Node->Head)
+			{
+				NewNode->Head = 0;
+				NewNode->Count = 0;
+
+				continue;
+			}
+
+			QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Node->Head;
+			NewNode->Head = NodeEntityIdx;
+			NewNode->Count = Node->Count;
+
+			while(1)
+			{
+				QuadtreeNodeEntity* NewNodeEntity = NodeEntities + NodeEntityIdx;
+				++NodeEntityIdx;
+
+				uint32_t OldEntityIdx = NodeEntity->Entity;
+				if(!EntityMap[OldEntityIdx])
+				{
+					uint32_t NewEntityIdx = EntityIdx++;
+					EntityMap[OldEntityIdx] = NewEntityIdx;
+					QuadtreeEntity* NewEntity = Entities + NewEntityIdx;
+					*NewEntity = QT->Entities[OldEntityIdx];
+				}
+				NewNodeEntity->Entity = EntityMap[OldEntityIdx];
+
+				if(NodeEntity->Next)
+				{
+					NodeEntity = QT->NodeEntities + NodeEntity->Next;
+					NewNodeEntity->Next = NodeEntityIdx;
+				}
+				else
+				{
+					NewNodeEntity->Next = 0;
+					break;
+				}
+			}
+		}
+		while(NodeInfo != NodeInfos);
+
+		free(QT->Nodes);
+		QT->Nodes = Nodes;
+		QT->NodesUsed = NodeIdx;
+		QT->FreeNode = 0;
+
+		free(QT->NodeEntities);
+		QT->NodeEntities = NodeEntities;
+		QT->NodeEntitiesUsed = NodeEntityIdx;
+		QT->FreeNodeEntity = 0;
+
+		free(QT->Entities);
+		QT->Entities = Entities;
+		QT->EntitiesUsed = EntityIdx;
+		QT->FreeEntity = 0;
+
+		free(EntityMap);
+	}
+
+	QuadtreeMaybeShrinkNodes(QT);
+	QuadtreeMaybeShrinkNodeEntities(QT);
+	QuadtreeMaybeShrinkEntities(QT);
+	QuadtreeMaybeShrinkHTEntries(QT);
+	QuadtreeMaybeShrinkRemovals(QT);
 }
 
 
 void
 QuadtreeQuery(
-	QUADTREE* Quadtree,
-	QUADTREE_POSITION_T X, QUADTREE_POSITION_T Y,
-	QUADTREE_POSITION_T W, QUADTREE_POSITION_T H
+	Quadtree* QT,
+	QuadtreeRectExtent Extent,
+	QuadtreeQueryT Callback
 	)
 {
-	++Quadtree->QueryTick;
-	QuadtreePostponeRemovals(Quadtree);
+	++QT->QueryTick;
+	QuadtreePostponeRemovals(QT);
 
-	uint32_t NodeInfosUsed = 1;
-	QUADTREE_NODE_INFO NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo* NodeInfo = NodeInfos;
 
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
+	*(NodeInfo++) =
+	(QuadtreeNodeInfo)
 	{
 		.NodeIdx = 0,
-		.X = Quadtree->X,
-		.Y = Quadtree->Y,
-		.W = Quadtree->W,
-		.H = Quadtree->H
+		.Extent = QT->HalfExtent
 	};
 
-	while(NodeInfosUsed)
+	do
 	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		QuadtreeNodeInfo Info = *(--NodeInfo);
+		QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
 
 		if(Node->Count == -1)
 		{
-			QUADTREE_DESCEND(X, Y, W, H);
-			continue;
-		}
-
-		if(!Node->Head)
-		{
+			QuadtreeDescend(Extent);
 			continue;
 		}
 
 		uint32_t Idx = Node->Head;
-		QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Idx;
-		while(1)
+		while(Idx)
 		{
-			QUADTREE_ENTITY* Entity = Quadtree->Entities + NodeEntity->Entity;
-			if(Entity->QueryTick != Quadtree->QueryTick)
+			QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Idx;
+			QuadtreeEntity* Entity = QT->Entities + NodeEntity->Entity;
+
+			if(Entity->QueryTick != QT->QueryTick)
 			{
-				Entity->QueryTick = Quadtree->QueryTick;
-				if(QuadtreeIntersects(
-					Entity->X, Entity->Y, Entity->W, Entity->H,
-					X, Y, W, H
-					))
+				Entity->QueryTick = QT->QueryTick;
+				if(QuadtreeIntersects(Entity->Extent, Extent))
 				{
-					Quadtree->Query(Quadtree, NodeEntity->Entity);
+					Callback(QT, Entity);
 				}
 			}
-			if(!NodeEntity->Next)
-			{
-				break;
-			}
-			NodeEntity = Quadtree->NodeEntities + NodeEntity->Next;
+
+			Idx = NodeEntity->Next;
 		}
 	}
+	while(NodeInfo != NodeInfos);
 
-	QuadtreeDoRemovals(Quadtree);
+	QuadtreeDoRemovals(QT);
 }
 
 
 void
 QuadtreeQueryNodes(
-	QUADTREE* Quadtree,
-	QUADTREE_POSITION_T X, QUADTREE_POSITION_T Y,
-	QUADTREE_POSITION_T W, QUADTREE_POSITION_T H
+	Quadtree* QT,
+	QuadtreeRectExtent Extent,
+	QuadtreeNodeQueryT Callback
 	)
 {
-	uint32_t NodeInfosUsed = 1;
-	QUADTREE_NODE_INFO NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo NodeInfos[QUADTREE_DFS_LENGTH];
+	QuadtreeNodeInfo* NodeInfo = NodeInfos;
 
-	NodeInfos[0] =
-	(QUADTREE_NODE_INFO)
+	*(NodeInfo++) =
+	(QuadtreeNodeInfo)
 	{
 		.NodeIdx = 0,
-		.X = Quadtree->X,
-		.Y = Quadtree->Y,
-		.W = Quadtree->W,
-		.H = Quadtree->H
+		.Extent = QT->HalfExtent
 	};
 
-	while(NodeInfosUsed)
+	do
 	{
-		QUADTREE_NODE_INFO Info = NodeInfos[--NodeInfosUsed];
-		QUADTREE_NODE* Node = Quadtree->Nodes + Info.NodeIdx;
+		QuadtreeNodeInfo Info = *(--NodeInfo);
+		QuadtreeNode* Node = QT->Nodes + Info.NodeIdx;
 
 		if(Node->Count == -1)
 		{
-			QUADTREE_DESCEND(X, Y, W, H);
+			QuadtreeDescend(Extent);
 			continue;
 		}
 
-		Quadtree->NodeQuery(Quadtree, &Info);
+		Callback(QT, &Info);
 	}
+	while(NodeInfo != NodeInfos);
 }
 
 
 static int
 QuadtreeHash(
-	QUADTREE* Quadtree,
+	Quadtree* QT,
 	uint32_t IndexA,
 	uint32_t IndexB
 	)
@@ -1058,37 +1061,29 @@ QuadtreeHash(
 	}
 
 	uint32_t Hash = IndexA * 48611 + IndexB * 50261;
-	Hash %= Quadtree->HashTableSize;
+	Hash %= QT->HashTableSize;
 
-	uint32_t Index = Quadtree->HashTable[Hash];
-	if(!Index)
-	{
-		goto goto_put;
-	}
+	uint32_t Index = QT->HashTable[Hash];
+	QuadtreeHTEntry* Entry;
 
-	QUADTREE_HT_ENTRY* Entry = Quadtree->HTEntries + Index;
-	while(1)
+	while(Index)
 	{
+		Entry = QT->HTEntries + Index;
+
 		if(Entry->Idx[0] == IndexA && Entry->Idx[1] == IndexB)
 		{
 			return 1; /* Hash exists */
 		}
 
-		if(!Entry->Next)
-		{
-			goto goto_put;
-		}
-		Entry = Quadtree->HTEntries + Entry->Next;
+		Index = Entry->Next;
 	}
 
-	goto_put:;
-
-	uint32_t EntryIdx = QuadtreeGetHTEntry(Quadtree);
-	Entry = Quadtree->HTEntries + EntryIdx;
+	uint32_t EntryIdx = QuadtreeGetHTEntry(QT);
+	Entry = QT->HTEntries + EntryIdx;
 	Entry->Idx[0] = IndexA;
 	Entry->Idx[1] = IndexB;
 	Entry->Next = Index;
-	Quadtree->HashTable[Hash] = EntryIdx;
+	QT->HashTable[Hash] = EntryIdx;
 
 	return 0;
 }
@@ -1096,16 +1091,17 @@ QuadtreeHash(
 
 void
 QuadtreeCollide(
-	QUADTREE* Quadtree
+	Quadtree* QT,
+	QuadtreeCollideT Callback
 	)
 {
-	QUADTREE_NODE* Node = Quadtree->Nodes;
-	QUADTREE_NODE* EndNode = Quadtree->Nodes + Quadtree->NodesUsed;
+	QuadtreeNode* Node = QT->Nodes;
+	QuadtreeNode* EndNode = QT->Nodes + QT->NodesUsed;
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	Quadtree->HashTableSize = Quadtree->EntitiesUsed * QUADTREE_HASH_TABLE_FACTOR;
-	Quadtree->HashTable = calloc(Quadtree->HashTableSize, sizeof(*Quadtree->HashTable));
-	QuadtreeResetHTEntries(Quadtree);
+	QT->HashTableSize = QT->EntitiesUsed * QUADTREE_HASH_TABLE_FACTOR;
+	QT->HashTable = calloc(QT->HashTableSize, sizeof(*QT->HashTable));
+	QuadtreeResetHTEntries(QT);
 #endif
 
 	while(Node != EndNode)
@@ -1116,47 +1112,54 @@ QuadtreeCollide(
 			continue;
 		}
 
-		QUADTREE_NODE_ENTITY* NodeEntity = Quadtree->NodeEntities + Node->Head;
-		QUADTREE_NODE_ENTITY* OtherNodeEntitySave = Quadtree->NodeEntities + Node->Head;
+		QuadtreeNodeEntity* NodeEntity = QT->NodeEntities + Node->Head;
+		QuadtreeEntity* Entity = QT->Entities + NodeEntity->Entity;
+
+		QuadtreeNodeEntity* OtherNodeEntitySave = QT->NodeEntities + Node->Head;
 		++Node;
 
-		while(1)
+		while(1) // todo this stupid cuz wastes one loop cuz we start from the same node entity for some stupid reason
 		{
-			QUADTREE_NODE_ENTITY* OtherNodeEntity = OtherNodeEntitySave;
+			QuadtreeNodeEntity* OtherNodeEntity = OtherNodeEntitySave;
+			QuadtreeEntity* OtherEntity = QT->Entities + OtherNodeEntity->Entity;
 
 			while(1)
 			{
 				if(
 					NodeEntity->Entity != OtherNodeEntity->Entity &&
-					Quadtree->IsColliding(Quadtree, NodeEntity->Entity, OtherNodeEntity->Entity)
+					QuadtreeIntersects(Entity->Extent, OtherEntity->Extent)
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-					&& !QuadtreeHash(Quadtree, NodeEntity->Entity, OtherNodeEntity->Entity)
+					&& !QuadtreeHash(QT, NodeEntity->Entity, OtherNodeEntity->Entity)
 #endif
 					)
 				{
-					Quadtree->Collide(Quadtree, NodeEntity->Entity, OtherNodeEntity->Entity);
+					Callback(QT, Entity, OtherEntity);
 				}
 
 				if(!OtherNodeEntity->Next)
 				{
 					break;
 				}
-				OtherNodeEntity = Quadtree->NodeEntities + OtherNodeEntity->Next;
+
+				OtherNodeEntity = QT->NodeEntities + OtherNodeEntity->Next;
+				OtherEntity = QT->Entities + OtherNodeEntity->Entity;
 			}
 
 			if(!NodeEntity->Next)
 			{
 				break;
 			}
-			NodeEntity = Quadtree->NodeEntities + NodeEntity->Next;
+
+			NodeEntity = QT->NodeEntities + NodeEntity->Next;
+			Entity = QT->Entities + NodeEntity->Entity;
 		}
 	}
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	free(Quadtree->HashTable);
+	free(QT->HashTable);
 #endif
 }
 
 
-#undef QUADTREE_DESCEND
+#undef QuadtreeDescend
 
