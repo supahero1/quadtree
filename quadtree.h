@@ -29,31 +29,38 @@ typedef struct QuadtreeNodeEntity
 QuadtreeNodeEntity;
 
 
-#ifndef QUADTREE_ENTITY_DATA_TYPE
+#ifndef QuadtreeEntityData
 
 
-	typedef struct QuadtreeEntityData
+	typedef struct QuadtreeEntityDataT
 	{
-		uint8_t _Reserved;
+		QuadtreeRectExtent RectExtent;
 	}
-	QuadtreeEntityData;
+	QuadtreeEntityDataT;
 
 
-	#define QUADTREE_ENTITY_DATA_TYPE QuadtreeEntityData
+	#define QuadtreeEntityData QuadtreeEntityDataT
+	#define QuadtreeGetEntityDataRectExtent(Entity) (Entity).RectExtent
 #endif
 
 
 typedef struct QuadtreeEntity
 {
-	QuadtreeRectExtent Extent;
-
-	QUADTREE_ENTITY_DATA_TYPE Data;
+	union
+	{
+		QuadtreeEntityData Data;
+		uint32_t Next;
+	};
 
 	uint32_t QueryTick;
 	uint8_t UpdateTick;
 	uint8_t Invalid;
 }
 QuadtreeEntity;
+
+
+#define QuadtreeGetEntityRectExtent(Entity)	\
+QuadtreeGetEntityDataRectExtent((Entity)->Data)
 
 
 typedef struct QuadtreeNodeInfo
@@ -72,13 +79,44 @@ typedef struct QuadtreeHTEntry
 QuadtreeHTEntry;
 
 
+typedef struct QuadtreeRemoval
+{
+	uint32_t EntityIdx;
+}
+QuadtreeRemoval;
+
+
+typedef struct QuadtreeNodeRemoval
+{
+	uint32_t NodeIdx;
+	uint32_t NodeEntityIdx;
+	uint32_t PrevNodeEntityIdx;
+}
+QuadtreeNodeRemoval;
+
+
+typedef struct QuadtreeInsertion
+{
+	QuadtreeEntityData Data;
+}
+QuadtreeInsertion;
+
+
+typedef struct QuadtreeReinsertion
+{
+	uint32_t EntityIdx;
+}
+QuadtreeReinsertion;
+
+
 typedef struct Quadtree Quadtree;
 
 
 typedef void
 (*QuadtreeQueryT)(
 	Quadtree* QT,
-	QuadtreeEntity* Entity
+	uint32_t EntityIdx,
+	QuadtreeEntityData* Entity
 	);
 
 
@@ -92,15 +130,16 @@ typedef void
 typedef void
 (*QuadtreeCollideT)(
 	const Quadtree* QT,
-	QuadtreeEntity* EntityA,
-	QuadtreeEntity* EntityB
+	QuadtreeEntityData* EntityA,
+	QuadtreeEntityData* EntityB
 	);
 
 
 typedef bool
 (*QuadtreeUpdateT)(
 	Quadtree* QT,
-	QuadtreeEntity* Entity
+	uint32_t EntityIdx,
+	QuadtreeEntityData* Entity
 	);
 
 
@@ -109,21 +148,14 @@ struct Quadtree
 	QuadtreeNode* Nodes;
 	QuadtreeNodeEntity* NodeEntities;
 	QuadtreeEntity* Entities;
+
 	QuadtreeHTEntry* HTEntries;
-	uint32_t* Removals;
+	QuadtreeRemoval* Removals;
+	QuadtreeNodeRemoval* NodeRemovals;
+	QuadtreeInsertion* Insertions;
+	QuadtreeReinsertion* Reinsertions;
 
-	uint32_t* HashTable;
-	uint32_t HashTableSize;
-
-	uint32_t Idx;
-	uint32_t QueryTick;
-	uint8_t UpdateTick;
-	uint32_t PostponeRemovals;
-
-	QuadtreeRectExtent RectExtent;
-	QuadtreeHalfExtent HalfExtent;
-
-	QuadtreePosition MinSize;
+	int32_t* NodeMap;
 
 	uint32_t FreeNode;
 	uint32_t NodesUsed;
@@ -137,13 +169,28 @@ struct Quadtree
 	uint32_t EntitiesUsed;
 	uint32_t EntitiesSize;
 
-	uint32_t FreeHTEntry;
 	uint32_t HTEntriesUsed;
 	uint32_t HTEntriesSize;
 
-	uint32_t FreeRemoval;
 	uint32_t RemovalsUsed;
 	uint32_t RemovalsSize;
+
+	uint32_t NodeRemovalsUsed;
+	uint32_t NodeRemovalsSize;
+
+	uint32_t InsertionsUsed;
+	uint32_t InsertionsSize;
+
+	uint32_t ReinsertionsUsed;
+	uint32_t ReinsertionsSize;
+
+	uint32_t QueryTick;
+	uint8_t UpdateTick;
+
+	QuadtreeRectExtent RectExtent;
+	QuadtreeHalfExtent HalfExtent;
+
+	QuadtreePosition MinSize;
 };
 
 
@@ -159,10 +206,10 @@ QuadtreeFree(
 	);
 
 
-extern QUADTREE_ENTITY_DATA_TYPE*
+extern void
 QuadtreeInsert(
 	Quadtree* QT,
-	const QuadtreeRectExtent* Extent
+	const QuadtreeEntityData* Data
 	);
 
 

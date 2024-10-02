@@ -39,12 +39,6 @@ PaintPixel(
 
 
 extern void
-Clicked(
-	double X, double Y
-	);
-
-
-extern void
 DrawInit(
 	void
 	);

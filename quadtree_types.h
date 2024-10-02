@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 /* How many entities can exist in a node without it splitting */
-#define QUADTREE_SPLIT_THRESHOLD 6
+#define QUADTREE_SPLIT_THRESHOLD 7
 
 /* You might want to increase this if you get a lot of collisions per tick */
 #define QUADTREE_HASH_TABLE_FACTOR 1

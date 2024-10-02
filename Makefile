@@ -1,5 +1,5 @@
-FLAGS = -Ofast -march=native -mtune=native -Wall -Wno-unused-function
-# FLAGS = -O0 -g3 -Wall -Wno-unused-function
+FLAGS = -Ofast -march=native -DNDEBUG -Wall -Wno-unused-function -Wno-address-of-packed-member
+# FLAGS = -O0 -g3 -ggdb -D_FORTIFY_SOURCE=3 -rdynamic -Wall -Wno-unused-function -Wno-address-of-packed-member
 LIBS = -lglfw -lGL -lm
 
 .PHONY: build
