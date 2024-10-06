@@ -5,6 +5,8 @@
 
 typedef struct QuadtreeNode
 {
+	int32_t Count;
+
 	union
 	{
 		uint32_t Next;
@@ -17,8 +19,6 @@ typedef struct QuadtreeNode
 
 		uint32_t Heads[4];
 	};
-
-	int32_t Count;
 }
 QuadtreeNode;
 
@@ -165,8 +165,6 @@ struct Quadtree
 	QuadtreeNodeRemoval* NodeRemovals;
 	QuadtreeInsertion* Insertions;
 	QuadtreeReinsertion* Reinsertions;
-
-	int32_t* NodeMap;
 
 	uint32_t NodesUsed;
 	uint32_t NodesSize;
