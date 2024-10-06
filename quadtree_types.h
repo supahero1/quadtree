@@ -3,8 +3,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* How many entities can exist in a node without it splitting */
+/* Above or equal, if can, 1 node splits into 4 */
 #define QUADTREE_SPLIT_THRESHOLD 7
+
+/* Below or equal, if can, 4 nodes merge into 1 */
+#define QUADTREE_MERGE_THRESHOLD 5
 
 /* You might want to increase this if you get a lot of collisions per tick */
 #define QUADTREE_HASH_TABLE_FACTOR 1

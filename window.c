@@ -113,6 +113,26 @@ PaintPixel(
 
 
 static void
+MouseButtonCallback(
+	GLFWwindow* Window,
+	int Button,
+	int Action,
+	int Mods
+	)
+{
+	if(Action == GLFW_PRESS)
+	{
+		Pressing = 1;
+		MouseMoved = 0;
+	}
+	else if(Action == GLFW_RELEASE)
+	{
+		Pressing = 0;
+	}
+}
+
+
+static void
 MouseMoveCallback(
 	GLFWwindow* Window,
 	double X,
@@ -158,6 +178,7 @@ DrawInit(
 	Window = glfwCreateWindow(WIDTH, HEIGHT, "Quadtree", NULL, NULL);
 	assert(Window);
 
+	glfwSetMouseButtonCallback(Window, MouseButtonCallback);
 	glfwSetCursorPosCallback(Window, MouseMoveCallback);
 	glfwSetScrollCallback(Window, MouseScrollCallback);
 

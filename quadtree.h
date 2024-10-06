@@ -5,18 +5,20 @@
 
 typedef struct QuadtreeNode
 {
-	uint32_t Count;
-
 	union
 	{
-		uint32_t Heads[4];
+		uint32_t Next;
 
 		struct
 		{
 			uint32_t Head;
 			uint32_t PositionFlags;
 		};
+
+		uint32_t Heads[4];
 	};
+
+	int32_t Count;
 }
 QuadtreeNode;
 
@@ -54,7 +56,6 @@ typedef struct QuadtreeEntity
 
 	uint32_t QueryTick;
 	uint8_t UpdateTick;
-	uint8_t Invalid;
 }
 QuadtreeEntity;
 
@@ -109,6 +110,15 @@ typedef struct QuadtreeReinsertion
 QuadtreeReinsertion;
 
 
+typedef enum QuadtreeStatus
+{
+	QUADTREE_STATUS_CHANGED,
+	QUADTREE_STATUS_NOT_CHANGED,
+	kQUADTREE_STATUS
+}
+QuadtreeStatus;
+
+
 typedef struct Quadtree Quadtree;
 
 
@@ -135,7 +145,7 @@ typedef void
 	);
 
 
-typedef bool
+typedef QuadtreeStatus
 (*QuadtreeUpdateT)(
 	Quadtree* QT,
 	uint32_t EntityIdx,
@@ -148,8 +158,9 @@ struct Quadtree
 	QuadtreeNode* Nodes;
 	QuadtreeNodeEntity* NodeEntities;
 	QuadtreeEntity* Entities;
-
+#if QUADTREE_DEDUPE_COLLISIONS == 1
 	QuadtreeHTEntry* HTEntries;
+#endif
 	QuadtreeRemoval* Removals;
 	QuadtreeNodeRemoval* NodeRemovals;
 	QuadtreeInsertion* Insertions;
@@ -157,19 +168,15 @@ struct Quadtree
 
 	int32_t* NodeMap;
 
-	uint32_t FreeNode;
 	uint32_t NodesUsed;
 	uint32_t NodesSize;
 
-	uint32_t FreeNodeEntity;
 	uint32_t NodeEntitiesUsed;
 	uint32_t NodeEntitiesSize;
 
-	uint32_t FreeEntity;
 	uint32_t EntitiesUsed;
 	uint32_t EntitiesSize;
 
-	uint32_t HTEntriesUsed;
 	uint32_t HTEntriesSize;
 
 	uint32_t RemovalsUsed;
@@ -221,6 +228,12 @@ QuadtreeRemove(
 
 
 extern void
+QuadtreeNormalize(
+	Quadtree* QT
+	);
+
+
+extern void
 QuadtreeUpdate(
 	Quadtree* QT,
 	QuadtreeUpdateT Callback
@@ -244,7 +257,14 @@ QuadtreeQueryNodes(
 
 
 extern void
-QuadtreeCollide(
+QuadtreeCollideSlow(
+	Quadtree* QT,
+	QuadtreeCollideT Callback
+	);
+
+
+extern void
+QuadtreeCollideFast(
 	Quadtree* QT,
 	QuadtreeCollideT Callback
 	);

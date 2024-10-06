@@ -24,13 +24,13 @@ ENTITY;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(60000)
+#define ITER UINT32_C(1000)
 #define RADIUS_ODDS 2500.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 1024.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 10000.0f
-#define ARENA_HEIGHT 10000.0f
+#define ARENA_WIDTH 1000.0f
+#define ARENA_HEIGHT 1000.0f
 #define MEASURE_TICKS 60
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -50,9 +50,12 @@ typedef struct MEASUREMENT
 }
 MEASUREMENT;
 
+static MEASUREMENT MeasureNormalize;
 static MEASUREMENT MeasureCollide;
 static MEASUREMENT MeasureUpdate;
+#if DO_THEM_QUERIES == 1
 static MEASUREMENT MeasureQuery;
+#endif
 
 static float
 randf(
@@ -84,9 +87,10 @@ Measure(
 }
 
 
-static bool
+static QuadtreeStatus
 UpdateEntity(
 	Quadtree* QT,
+	uint32_t EntityIdx,
 	ENTITY* Entity
 	)
 {
@@ -149,7 +153,7 @@ UpdateEntity(
 	}
 #endif
 
-	return true;
+	return QUADTREE_STATUS_CHANGED;
 }
 
 static void
@@ -254,6 +258,7 @@ DrawNode(
 static void
 DrawEntity(
 	Quadtree* QT,
+	uint32_t EntityIdx,
 	ENTITY* Entity
 	)
 {
@@ -357,12 +362,21 @@ Tick(
 	)
 {
 	Start = GetTime();
-	QuadtreeCollide(&QT, CollideEntities);
+	QuadtreeNormalize(&QT);
+	End = GetTime();
+	Time = Measure(&MeasureNormalize, End - Start);
+	if(Time)
+	{
+		printf("\nNormalize: %.02lfms\n", Time);
+	}
+
+	Start = GetTime();
+	QuadtreeCollideSlow(&QT, CollideEntities);
 	End = GetTime();
 	Time = Measure(&MeasureCollide, End - Start);
 	if(Time)
 	{
-		printf("\nCollide: %.02lfms\n", Time);
+		printf("Collide: %.02lfms\n", Time);
 	}
 
 	Start = GetTime();
@@ -400,7 +414,7 @@ main()
 
 	uint64_t Seed = GetTime() * 100000;
 	printf("Seed: %lu\n", Seed);
-	srand(2);
+	srand(3);
 
 	QT.RectExtent =
 	(QuadtreeRectExtent)
