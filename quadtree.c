@@ -1332,7 +1332,7 @@ QuadtreeCollide(
 	QuadtreeEntity* Entities = QT->Entities;
 
 	QuadtreeNodeEntity* NodeEntity = NodeEntities;
-	QuadtreeNodeEntity* NodeEntitiesEnd = NodeEntities + QT->NodeEntitiesUsed;
+	QuadtreeNodeEntity* NodeEntitiesEnd = NodeEntities + QT->NodeEntitiesUsed - 1;
 
 	do
 	{
@@ -1345,6 +1345,7 @@ QuadtreeCollide(
 
 		uint32_t EntityIdx = NodeEntity->Entity;
 		QuadtreeEntity* Entity = Entities + EntityIdx;
+		QuadtreeRectExtent EntityExtent = QuadtreeGetEntityRectExtent(Entity);
 
 		QuadtreeNodeEntity* OtherNodeEntity = NodeEntity;
 		while(1)
@@ -1355,7 +1356,7 @@ QuadtreeCollide(
 			QuadtreeEntity* OtherEntity = Entities + OtherEntityIdx;
 
 			if(!QuadtreeIntersects(
-				QuadtreeGetEntityRectExtent(Entity),
+				EntityExtent,
 				QuadtreeGetEntityRectExtent(OtherEntity)
 				))
 			{
