@@ -186,6 +186,15 @@ DrawInit(
 
 	glfwMakeContextCurrent(Window);
 
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, WIDTH, 0, HEIGHT, -1, 1);
+	glMatrixMode(GL_MODELVIEW);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
 	Pixels = malloc(sizeof(*Pixels) * WIDTH * HEIGHT);
 	assert(Pixels);
 }
@@ -243,6 +252,8 @@ DrawFree(
 	)
 {
 	free(Pixels);
+
+	glDisable(GL_BLEND);
 
 	glfwDestroyWindow(Window);
 	glfwTerminate();

@@ -24,13 +24,13 @@ ENTITY;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(100000)
+#define ITER UINT32_C(200000)
 #define RADIUS_ODDS 2500.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 1024.0f
-#define MIN_SIZE 16.0f
-#define ARENA_WIDTH 60000.0f
-#define ARENA_HEIGHT 60000.0f
+#define MIN_SIZE 32.0f
+#define ARENA_WIDTH 100000.0f
+#define ARENA_HEIGHT 100000.0f
 #define MEASURE_TICKS 60
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -414,7 +414,7 @@ main()
 
 	uint64_t Seed = GetTime() * 100000;
 	printf("Seed: %lu\n", Seed);
-	srand(3);
+	srand(Seed);
 
 	QT.RectExtent =
 	(QuadtreeRectExtent)

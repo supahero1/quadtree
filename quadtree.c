@@ -6,13 +6,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef NDEBUG
+	#define QT_MALLOC(Size) AllocMalloc(Size)
+	#define QT_CALLOC(Size) AllocCalloc(Size)
+	#define QT_REMALLOC(OldSize, Ptr, NewSize) AllocRemalloc(OldSize, Ptr, NewSize)
+	#define QT_FREE(Size, Ptr) AllocFree(Size, Ptr)
+#else
+	#define QT_MALLOC(Size) malloc(Size)
+	#define QT_CALLOC(Size) calloc(1, Size)
+	#define QT_REMALLOC(OldSize, Ptr, NewSize) realloc(Ptr, NewSize)
+	#define QT_FREE(Size, Ptr) free(Ptr)
+#endif
+
 
 void
 QuadtreeInit(
 	Quadtree* QT
 	)
 {
-	QT->Nodes = AllocMalloc(sizeof(*QT->Nodes));
+	QT->Nodes = QT_MALLOC(sizeof(*QT->Nodes));
 	QT->NodeEntities = NULL;
 	QT->Entities = NULL;
 #if QUADTREE_DEDUPE_COLLISIONS == 1
@@ -61,16 +73,16 @@ QuadtreeFree(
 	Quadtree* QT
 	)
 {
-	AllocFree(sizeof(*QT->Nodes) * QT->NodesSize, QT->Nodes);
-	AllocFree(sizeof(*QT->NodeEntities) * QT->NodeEntitiesSize, QT->NodeEntities);
-	AllocFree(sizeof(*QT->Entities) * QT->EntitiesSize, QT->Entities);
+	QT_FREE(sizeof(*QT->Nodes) * QT->NodesSize, QT->Nodes);
+	QT_FREE(sizeof(*QT->NodeEntities) * QT->NodeEntitiesSize, QT->NodeEntities);
+	QT_FREE(sizeof(*QT->Entities) * QT->EntitiesSize, QT->Entities);
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	AllocFree(sizeof(*QT->HTEntries) * QT->HTEntriesSize, QT->HTEntries);
+	QT_FREE(sizeof(*QT->HTEntries) * QT->HTEntriesSize, QT->HTEntries);
 #endif
-	AllocFree(sizeof(*QT->Removals) * QT->RemovalsSize, QT->Removals);
-	AllocFree(sizeof(*QT->NodeRemovals) * QT->NodeRemovalsSize, QT->NodeRemovals);
-	AllocFree(sizeof(*QT->Insertions) * QT->InsertionsSize, QT->Insertions);
-	AllocFree(sizeof(*QT->Reinsertions) * QT->ReinsertionsSize, QT->Reinsertions);
+	QT_FREE(sizeof(*QT->Removals) * QT->RemovalsSize, QT->Removals);
+	QT_FREE(sizeof(*QT->NodeRemovals) * QT->NodeRemovalsSize, QT->NodeRemovals);
+	QT_FREE(sizeof(*QT->Insertions) * QT->InsertionsSize, QT->Insertions);
+	QT_FREE(sizeof(*QT->Reinsertions) * QT->ReinsertionsSize, QT->Reinsertions);
 }
 
 
@@ -164,7 +176,7 @@ QuadtreeInsert(
 	{
 		uint32_t NewSize = (QT->InsertionsUsed << 1) | 1;
 
-		QT->Insertions = AllocRemalloc(sizeof(*QT->Insertions) * QT->InsertionsSize,
+		QT->Insertions = QT_REMALLOC(sizeof(*QT->Insertions) * QT->InsertionsSize,
 			QT->Insertions, sizeof(*QT->Insertions) * NewSize);
 		AssertNEQ(QT->Insertions, NULL);
 
@@ -188,7 +200,7 @@ QuadtreeRemove(
 	{
 		uint32_t NewSize = (QT->RemovalsUsed << 1) | 1;
 
-		QT->Removals = AllocRemalloc(sizeof(*QT->Removals) * QT->RemovalsSize,
+		QT->Removals = QT_REMALLOC(sizeof(*QT->Removals) * QT->RemovalsSize,
 			QT->Removals, sizeof(*QT->Removals) * NewSize);
 		AssertNEQ(QT->Removals, NULL);
 
@@ -275,7 +287,7 @@ QuadtreeNormalize(
 			--NodeRemoval;
 		}
 
-		AllocFree(sizeof(*NodeRemovals) * QT->NodeRemovalsSize, NodeRemovals);
+		QT_FREE(sizeof(*NodeRemovals) * QT->NodeRemovalsSize, NodeRemovals);
 		QT->NodeRemovals = NULL;
 		QT->NodeRemovalsUsed = 0;
 		QT->NodeRemovalsSize = 0;
@@ -351,7 +363,7 @@ QuadtreeNormalize(
 			++Removal;
 		}
 
-		AllocFree(sizeof(*Removals) * QT->RemovalsSize, Removals);
+		QT_FREE(sizeof(*Removals) * QT->RemovalsSize, Removals);
 		QT->Removals = NULL;
 		QT->RemovalsUsed = 0;
 		QT->RemovalsSize = 0;
@@ -417,7 +429,7 @@ QuadtreeNormalize(
 					{
 						uint32_t NewSize = (NodeEntitiesUsed << 1) | 1;
 
-						NodeEntities = AllocRemalloc(sizeof(*NodeEntities) * NodeEntitiesSize,
+						NodeEntities = QT_REMALLOC(sizeof(*NodeEntities) * NodeEntitiesSize,
 							NodeEntities, sizeof(*NodeEntities) * NewSize);
 						AssertNEQ(NodeEntities, NULL);
 
@@ -441,7 +453,7 @@ QuadtreeNormalize(
 			++Reinsertion;
 		}
 
-		AllocFree(sizeof(*Reinsertions) * QT->ReinsertionsSize, Reinsertions);
+		QT_FREE(sizeof(*Reinsertions) * QT->ReinsertionsSize, Reinsertions);
 		QT->Reinsertions = NULL;
 		QT->ReinsertionsUsed = 0;
 		QT->ReinsertionsSize = 0;
@@ -472,7 +484,7 @@ QuadtreeNormalize(
 				{
 					uint32_t NewSize = (EntitiesUsed << 1) | 1;
 
-					Entities = AllocRemalloc(sizeof(*Entities) * EntitiesSize,
+					Entities = QT_REMALLOC(sizeof(*Entities) * EntitiesSize,
 						Entities, sizeof(*Entities) * NewSize);
 					AssertNEQ(Entities, NULL);
 
@@ -524,7 +536,7 @@ QuadtreeNormalize(
 					{
 						uint32_t NewSize = (NodeEntitiesUsed << 1) | 1;
 
-						NodeEntities = AllocRemalloc(sizeof(*NodeEntities) * NodeEntitiesSize,
+						NodeEntities = QT_REMALLOC(sizeof(*NodeEntities) * NodeEntitiesSize,
 							NodeEntities, sizeof(*NodeEntities) * NewSize);
 						AssertNEQ(NodeEntities, NULL);
 
@@ -549,7 +561,7 @@ QuadtreeNormalize(
 			++Insertion;
 		}
 
-		AllocFree(sizeof(*Insertions) * QT->InsertionsSize, Insertions);
+		QT_FREE(sizeof(*Insertions) * QT->InsertionsSize, Insertions);
 		QT->Insertions = NULL;
 		QT->InsertionsUsed = 0;
 		QT->InsertionsSize = 0;
@@ -601,16 +613,16 @@ QuadtreeNormalize(
 			NewEntitiesSize = EntitiesSize >> 1;
 		}
 
-		NewNodes = AllocMalloc(sizeof(*NewNodes) * NewNodesSize);
+		NewNodes = QT_MALLOC(sizeof(*NewNodes) * NewNodesSize);
 		AssertNEQ(NewNodes, NULL);
 
-		NewNodeEntities = AllocMalloc(sizeof(*NewNodeEntities) * NewNodeEntitiesSize);
+		NewNodeEntities = QT_MALLOC(sizeof(*NewNodeEntities) * NewNodeEntitiesSize);
 		AssertNEQ(NewNodeEntities, NULL);
 
-		NewEntities = AllocMalloc(sizeof(*NewEntities) * NewEntitiesSize);
+		NewEntities = QT_MALLOC(sizeof(*NewEntities) * NewEntitiesSize);
 		AssertNEQ(NewEntities, NULL);
 
-		uint32_t* EntityMap = AllocCalloc(sizeof(*EntityMap) * EntitiesSize);
+		uint32_t* EntityMap = QT_CALLOC(sizeof(*EntityMap) * EntitiesSize);
 		AssertNEQ(EntityMap, NULL);
 
 
@@ -643,7 +655,6 @@ QuadtreeNormalize(
 			uint32_t NewNodeIdx = NewNodesUsed++;
 			QuadtreeNode* NewNode = NewNodes + NewNodeIdx;
 
-			NewNode->PositionFlags = Node->PositionFlags;
 			NewNodes[Info.ParentNodeIdx].Heads[Info.HeadIdx] = NewNodeIdx;
 
 			if(Node->Count == -1)
@@ -687,67 +698,66 @@ QuadtreeNormalize(
 					Children[i] = Nodes + Heads[i];
 				}
 
-				Node->PositionFlags = Children[0]->PositionFlags;
-				Node->PositionFlags |= Children[1]->PositionFlags;
-				Node->PositionFlags |= Children[2]->PositionFlags;
-				Node->PositionFlags |= Children[3]->PositionFlags;
-
-				QuadtreeNode* MaxChild = Nodes + Heads[MaxIdx];
+				QuadtreeNode* MaxChild = Children[MaxIdx];
 				Node->Count = MaxChild->Count;
 				Node->Head = MaxChild->Head;
+				Node->PositionFlags = MaxChild->PositionFlags;
 
-				if(Node->Count != 0 && Node->Count != Total)
+				for(int i = 0; i < 4; ++i)
 				{
-					for(int i = 0; i < 4; ++i)
+					uint32_t ChildIdx = Heads[i];
+					QuadtreeNode* Child = Children[i];
+
+					if(i == MaxIdx)
 					{
-						if(i == MaxIdx)
-						{
-							continue;
-						}
-
-						uint32_t ChildIdx = Heads[i];
-						QuadtreeNode* Child = Children[i];
-
-						Node->PositionFlags |= Child->PositionFlags;
-
-						uint32_t NodeEntityIdx = Child->Head;
-						while(NodeEntityIdx)
-						{
-							QuadtreeNodeEntity* NodeEntity = NodeEntities + NodeEntityIdx;
-
-							QuadtreeNodeEntity* OtherNodeEntity = NodeEntities + Node->Head;
-							while(1)
-							{
-								if(NodeEntity->Entity == OtherNodeEntity->Entity)
-								{
-									//FreeNodeEntity = NodeEntityIdx;
-									NodeEntityIdx = NodeEntity->Next;
-									//NodeEntity->Next = FreeNodeEntity;
-
-									break;
-								}
-
-								if(!OtherNodeEntity->Next)
-								{
-									OtherNodeEntity->Next = NodeEntityIdx;
-									NodeEntityIdx = NodeEntity->Next;
-									NodeEntity->Next = 0;
-
-									++Node->Count;
-
-									break;
-								}
-
-								OtherNodeEntity = NodeEntities + OtherNodeEntity->Next;
-							}
-						}
-
-						FreeNode = ChildIdx;
 						Child->Next = FreeNode;
+						FreeNode = ChildIdx;
+
+						continue;
 					}
+
+					Node->PositionFlags |= Child->PositionFlags;
+
+					uint32_t NodeEntityIdx = Child->Head;
+					while(NodeEntityIdx)
+					{
+						QuadtreeNodeEntity* NodeEntity = NodeEntities + NodeEntityIdx;
+
+						QuadtreeNodeEntity* OtherNodeEntity = NodeEntities + Node->Head;
+						while(1)
+						{
+							if(NodeEntity->Entity == OtherNodeEntity->Entity)
+							{
+								uint32_t NextNodeEntityIdx = NodeEntity->Next;
+
+								NodeEntity->Next = FreeNodeEntity;
+								FreeNodeEntity = NodeEntityIdx;
+
+								NodeEntityIdx = NextNodeEntityIdx;
+
+								break;
+							}
+
+							if(!OtherNodeEntity->Next)
+							{
+								OtherNodeEntity->Next = NodeEntityIdx;
+								NodeEntityIdx = NodeEntity->Next;
+								NodeEntity->Next = 0;
+
+								++Node->Count;
+
+								break;
+							}
+
+							OtherNodeEntity = NodeEntities + OtherNodeEntity->Next;
+						}
+					}
+
+					Child->Next = FreeNode;
+					FreeNode = ChildIdx;
 				}
 
-				goto goto_leaf;
+				goto goto_leaf; // TODO copy to new node right away
 
 				goto_parent:;
 
@@ -829,64 +839,66 @@ QuadtreeNormalize(
 				Info.Extent.H >= QT->MinSize
 				)
 			{
-				QuadtreeNode* NodeHeads[4];
-
-				uint32_t BaseIdx;
-
-				if(FreeNode)
-				{
-					BaseIdx = FreeNode;
-					FreeNode = Nodes[BaseIdx].Next;
-				}
-				else
-				{
-					if(NodesUsed + 4 > NodesSize)
-					{
-						uint32_t NewSize = (NodesUsed << 1) | 1;
-						if(NewSize < 7) /* If Used was 1 */
-						{
-							NewSize = 7;
-						}
-
-						Nodes = AllocRemalloc(sizeof(*Nodes) * NodesSize,
-							Nodes, sizeof(*Nodes) * NewSize);
-						AssertNEQ(Nodes, NULL);
-
-						NodesSize = NewSize;
-
-						Node = Nodes + Info.NodeIdx;
-
-
-						if(NewSize > NewNodesSize)
-						{
-							NewNodes = AllocRemalloc(sizeof(*Nodes) * NewNodesSize,
-								NewNodes, sizeof(*Nodes) * NewSize);
-							AssertNEQ(NewNodes, NULL);
-
-							NewNodesSize = NewSize;
-
-							NewNode = NewNodes + NewNodeIdx;
-						}
-					}
-
-					BaseIdx = NodesUsed;
-					NodesUsed += 4;
-				}
-
-				uint32_t Head = Node->Head;
+				uint32_t ChildIdxs[4];
 
 				for(int i = 0; i < 4; ++i)
 				{
-					uint32_t NewNodeIdx = BaseIdx + i;
-					QuadtreeNode* NewNode = Nodes + NewNodeIdx;
+					uint32_t ChildIdx;
 
-					Node->Heads[i] = NewNodeIdx;
-					NodeHeads[i] = NewNode;
+					if(FreeNode)
+					{
+						ChildIdx = FreeNode;
+						FreeNode = Nodes[ChildIdx].Next;
+					}
+					else
+					{
+						if(NodesUsed >= NodesSize)
+						{
+							uint32_t NewSize = (NodesUsed << 1) | 1;
 
-					NewNode->Head = 0;
-					NewNode->Count = 0;
+							Nodes = QT_REMALLOC(sizeof(*Nodes) * NodesSize,
+								Nodes, sizeof(*Nodes) * NewSize);
+							AssertNEQ(Nodes, NULL);
 
-					static const uint32_t PositionFlags[4] =
+							NodesSize = NewSize;
+
+							Node = Nodes + Info.NodeIdx;
+
+
+							if(NewSize > NewNodesSize)
+							{
+								NewNodes = QT_REMALLOC(sizeof(*Nodes) * NewNodesSize,
+									NewNodes, sizeof(*Nodes) * NewSize);
+								AssertNEQ(NewNodes, NULL);
+
+								NewNodesSize = NewSize;
+
+								NewNode = NewNodes + NewNodeIdx;
+							}
+						}
+
+						ChildIdx = NodesUsed++;
+					}
+
+					ChildIdxs[i] = ChildIdx;
+				}
+
+				QuadtreeNode* Children[4];
+				uint32_t Head = Node->Head;
+				uint32_t PositionFlags = Node->PositionFlags;
+
+				for(int i = 0; i < 4; ++i)
+				{
+					uint32_t ChildIdx = ChildIdxs[i];
+					QuadtreeNode* Child = Nodes + ChildIdx;
+					Children[i] = Child;
+
+					Node->Heads[i] = ChildIdx;
+
+					Child->Head = 0;
+					Child->Count = 0;
+
+					static const uint32_t PositionFlagsMask[4] =
 					{
 						0b0011, /* TR */
 						0b1001, /* TL */
@@ -894,7 +906,7 @@ QuadtreeNormalize(
 						0b1100  /* BL */
 					};
 
-					NewNode->PositionFlags = Node->PositionFlags & PositionFlags[i];
+					Child->PositionFlags = PositionFlags & PositionFlagsMask[i];
 				}
 
 				uint32_t NodeEntityIdx = Head;
@@ -935,7 +947,7 @@ QuadtreeNormalize(
 
 					for(uint32_t* TargetNodeIdx = TargetNodeIdxs; TargetNodeIdx != CurrentTargetNodeIdx; ++TargetNodeIdx)
 					{
-						QuadtreeNode* TargetNode = NodeHeads[*TargetNodeIdx];
+						QuadtreeNode* TargetNode = Children[*TargetNodeIdx];
 
 						uint32_t NewNodeEntityIdx;
 						QuadtreeNodeEntity* NewNodeEntity;
@@ -952,7 +964,7 @@ QuadtreeNormalize(
 							{
 								uint32_t NewSize = (NodeEntitiesUsed << 1) | 1;
 
-								NodeEntities = AllocRemalloc(sizeof(*NodeEntities) * NodeEntitiesSize,
+								NodeEntities = QT_REMALLOC(sizeof(*NodeEntities) * NodeEntitiesSize,
 									NodeEntities, sizeof(*NodeEntities) * NewSize);
 								AssertNEQ(NodeEntities, NULL);
 
@@ -963,7 +975,7 @@ QuadtreeNormalize(
 
 								if(NewSize > NewNodeEntitiesSize)
 								{
-									NewNodeEntities = AllocRemalloc(sizeof(*NewNodeEntities) * NewNodeEntitiesSize,
+									NewNodeEntities = QT_REMALLOC(sizeof(*NewNodeEntities) * NewNodeEntitiesSize,
 										NewNodeEntities, sizeof(*NewNodeEntities) * NewSize);
 									AssertNEQ(NewNodeEntities, NULL);
 
@@ -996,6 +1008,8 @@ QuadtreeNormalize(
 			}
 
 			goto_leaf:
+
+			NewNode->PositionFlags = Node->PositionFlags;
 
 			if(!Node->Head)
 			{
@@ -1040,22 +1054,22 @@ QuadtreeNormalize(
 		}
 		while(NodeInfo != NodeInfos);
 
-		AllocFree(sizeof(*Nodes) * NodesSize, Nodes);
+		QT_FREE(sizeof(*Nodes) * NodesSize, Nodes);
 		QT->Nodes = NewNodes;
 		QT->NodesUsed = NewNodesUsed;
 		QT->NodesSize = NewNodesSize;
 
-		AllocFree(sizeof(*NodeEntities) * NodeEntitiesSize, NodeEntities);
+		QT_FREE(sizeof(*NodeEntities) * NodeEntitiesSize, NodeEntities);
 		QT->NodeEntities = NewNodeEntities;
 		QT->NodeEntitiesUsed = NewNodeEntitiesUsed;
 		QT->NodeEntitiesSize = NewNodeEntitiesSize;
 
-		AllocFree(sizeof(*Entities) * EntitiesSize, Entities);
+		QT_FREE(sizeof(*Entities) * EntitiesSize, Entities);
 		QT->Entities = NewEntities;
 		QT->EntitiesUsed = NewEntitiesUsed;
 		QT->EntitiesSize = NewEntitiesSize;
 
-		AllocFree(sizeof(*EntityMap) * EntitiesSize, EntityMap);
+		QT_FREE(sizeof(*EntityMap) * EntitiesSize, EntityMap);
 	}
 }
 
@@ -1131,7 +1145,7 @@ QuadtreeUpdate(
 					{
 						uint32_t NewSize = (ReinsertionsUsed << 1) | 1;
 
-						Reinsertions = AllocRemalloc(sizeof(*Reinsertions) * ReinsertionsSize,
+						Reinsertions = QT_REMALLOC(sizeof(*Reinsertions) * ReinsertionsSize,
 							Reinsertions, sizeof(*Reinsertions) * NewSize);
 						AssertNEQ(Reinsertions, NULL);
 
@@ -1163,7 +1177,7 @@ QuadtreeUpdate(
 				{
 					uint32_t NewSize = (NodeRemovalsUsed << 1) | 1;
 
-					NodeRemovals = AllocRemalloc(sizeof(*NodeRemovals) * NodeRemovalsSize,
+					NodeRemovals = QT_REMALLOC(sizeof(*NodeRemovals) * NodeRemovalsSize,
 						NodeRemovals, sizeof(*NodeRemovals) * NewSize);
 					AssertNEQ(NodeRemovals, NULL);
 
@@ -1300,7 +1314,7 @@ QuadtreeCollideSlow(
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	uint32_t HashTableSize = QT->EntitiesUsed * QUADTREE_HASH_TABLE_FACTOR;
-	uint32_t* HashTable = AllocCalloc(sizeof(*HashTable) * HashTableSize);
+	uint32_t* HashTable = QT_CALLOC(sizeof(*HashTable) * HashTableSize);
 	AssertNEQ(HashTable, NULL);
 
 	QuadtreeHTEntry* HTEntries = QT->HTEntries;
@@ -1379,7 +1393,7 @@ QuadtreeCollideSlow(
 				{
 					uint32_t NewSize = (HTEntriesUsed << 1) | 1;
 
-					HTEntries = AllocRemalloc(sizeof(*HTEntries) * HTEntriesSize,
+					HTEntries = QT_REMALLOC(sizeof(*HTEntries) * HTEntriesSize,
 						HTEntries, sizeof(*HTEntries) * NewSize);
 					AssertNEQ(HTEntries, NULL);
 
@@ -1422,7 +1436,7 @@ QuadtreeCollideSlow(
 	QT->HTEntries = HTEntries;
 	QT->HTEntriesSize = HTEntriesSize;
 
-	AllocFree(sizeof(*HashTable) * HashTableSize, HashTable);
+	QT_FREE(sizeof(*HashTable) * HashTableSize, HashTable);
 #endif
 }
 
@@ -1438,7 +1452,7 @@ QuadtreeCollideFast(
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	uint32_t HashTableSize = QT->EntitiesUsed * QUADTREE_HASH_TABLE_FACTOR;
-	uint32_t* HashTable = AllocCalloc(sizeof(*HashTable) * HashTableSize);
+	uint32_t* HashTable = QT_CALLOC(sizeof(*HashTable) * HashTableSize);
 	AssertNEQ(HashTable, NULL);
 
 	QuadtreeHTEntry* HTEntries = QT->HTEntries;
@@ -1517,7 +1531,7 @@ QuadtreeCollideFast(
 				{
 					uint32_t NewSize = (HTEntriesUsed << 1) | 1;
 
-					HTEntries = AllocRemalloc(sizeof(*HTEntries) * HTEntriesSize,
+					HTEntries = QT_REMALLOC(sizeof(*HTEntries) * HTEntriesSize,
 						HTEntries, sizeof(*HTEntries) * NewSize);
 					AssertNEQ(HTEntries, NULL);
 
@@ -1560,7 +1574,7 @@ QuadtreeCollideFast(
 	QT->HTEntries = HTEntries;
 	QT->HTEntriesSize = HTEntriesSize;
 
-	AllocFree(sizeof(*HashTable) * HashTableSize, HashTable);
+	QT_FREE(sizeof(*HashTable) * HashTableSize, HashTable);
 #endif
 }
 

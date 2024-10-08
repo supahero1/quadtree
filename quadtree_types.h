@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 /* Above or equal, if can, 1 node splits into 4 */
-#define QUADTREE_SPLIT_THRESHOLD 6
+#define QUADTREE_SPLIT_THRESHOLD 7
 
 /* Below or equal, if can, 4 nodes merge into 1 */
 #define QUADTREE_MERGE_THRESHOLD 5
