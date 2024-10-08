@@ -255,14 +255,7 @@ QuadtreeQueryNodes(
 
 
 extern void
-QuadtreeCollideSlow(
-	Quadtree* QT,
-	QuadtreeCollideT Callback
-	);
-
-
-extern void
-QuadtreeCollideFast(
+QuadtreeCollide(
 	Quadtree* QT,
 	QuadtreeCollideT Callback
 	);

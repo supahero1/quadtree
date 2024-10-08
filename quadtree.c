@@ -1,12 +1,13 @@
 #include "quadtree.h"
 #include "alloc/include/debug.h"
-#include "alloc/include/alloc_ext.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef NDEBUG
+	#include "alloc/include/alloc_ext.h"
+
 	#define QT_MALLOC(Size) AllocMalloc(Size)
 	#define QT_CALLOC(Size) AllocCalloc(Size)
 	#define QT_REMALLOC(OldSize, Ptr, NewSize) AllocRemalloc(OldSize, Ptr, NewSize)
@@ -1304,13 +1305,17 @@ QuadtreeQueryNodes(
 
 
 void
-QuadtreeCollideSlow(
+QuadtreeCollide(
 	Quadtree* QT,
 	QuadtreeCollideT Callback
 	)
 {
-	QuadtreeNode* Node = QT->Nodes;
-	QuadtreeNode* EndNode = QT->Nodes + QT->NodesUsed;
+	QuadtreeNormalize(QT);
+
+	if(QT->EntitiesUsed <= 1)
+	{
+		return;
+	}
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	uint32_t HashTableSize = QT->EntitiesUsed * QUADTREE_HASH_TABLE_FACTOR;
@@ -1326,249 +1331,97 @@ QuadtreeCollideSlow(
 	QuadtreeNodeEntity* NodeEntities = QT->NodeEntities;
 	QuadtreeEntity* Entities = QT->Entities;
 
-	while(Node != EndNode)
+	QuadtreeNodeEntity* NodeEntity = NodeEntities;
+	QuadtreeNodeEntity* NodeEntitiesEnd = NodeEntities + QT->NodeEntitiesUsed;
+
+	do
 	{
-		if(Node->Count == -1 || !Node->Head)
+		++NodeEntity;
+
+		if(!NodeEntity->Next)
 		{
-			++Node;
 			continue;
 		}
 
-		QuadtreeNodeEntity* NodeEntity = NodeEntities + Node->Head;
-		++Node;
+		uint32_t EntityIdx = NodeEntity->Entity;
+		QuadtreeEntity* Entity = Entities + EntityIdx;
 
-		QuadtreeEntity* Entity = Entities + NodeEntity->Entity;
-
-		while(NodeEntity->Next)
+		QuadtreeNodeEntity* OtherNodeEntity = NodeEntity;
+		while(1)
 		{
-			QuadtreeNodeEntity* OtherNodeEntity = NodeEntities + NodeEntity->Next;
+			++OtherNodeEntity;
 
-			while(1)
+			uint32_t OtherEntityIdx = OtherNodeEntity->Entity;
+			QuadtreeEntity* OtherEntity = Entities + OtherEntityIdx;
+
+			if(!QuadtreeIntersects(
+				QuadtreeGetEntityRectExtent(Entity),
+				QuadtreeGetEntityRectExtent(OtherEntity)
+				))
 			{
-				uint32_t IndexA = NodeEntity->Entity;
-				uint32_t IndexB = OtherNodeEntity->Entity;
-
-				if(NodeEntity->Entity == OtherNodeEntity->Entity)
-				{
-					goto goto_skip;
-				}
-
-				QuadtreeEntity* OtherEntity = Entities + OtherNodeEntity->Entity;
-
-				if(!QuadtreeIntersects(
-					QuadtreeGetEntityRectExtent(Entity),
-					QuadtreeGetEntityRectExtent(OtherEntity)
-					))
-				{
-					goto goto_skip;
-				}
-
-#if QUADTREE_DEDUPE_COLLISIONS == 1
-				if(IndexA > IndexB)
-				{
-					uint32_t Temp = IndexA;
-					IndexA = IndexB;
-					IndexB = Temp;
-				}
-
-				uint32_t Hash = IndexA * 48611 + IndexB * 50261;
-				Hash %= HashTableSize;
-
-				uint32_t Index = HashTable[Hash];
-				QuadtreeHTEntry* Entry;
-
-				while(Index)
-				{
-					Entry = HTEntries + Index;
-
-					if(Entry->Idx[0] == IndexA && Entry->Idx[1] == IndexB)
-					{
-						goto goto_skip;
-					}
-
-					Index = Entry->Next;
-				}
-
-				if(HTEntriesUsed >= HTEntriesSize)
-				{
-					uint32_t NewSize = (HTEntriesUsed << 1) | 1;
-
-					HTEntries = QT_REMALLOC(sizeof(*HTEntries) * HTEntriesSize,
-						HTEntries, sizeof(*HTEntries) * NewSize);
-					AssertNEQ(HTEntries, NULL);
-
-					HTEntriesSize = NewSize;
-				}
-
-				uint32_t EntryIdx = HTEntriesUsed++;
-				Entry = HTEntries + EntryIdx;
-
-				Entry->Idx[0] = IndexA;
-				Entry->Idx[1] = IndexB;
-				Entry->Next = Index;
-				HashTable[Hash] = EntryIdx;
-#endif
-
-				Callback(QT, &Entity->Data, &OtherEntity->Data);
-
-
-				goto_skip:
-
-				if(!OtherNodeEntity->Next)
-				{
-					break;
-				}
-
-				OtherNodeEntity = NodeEntities + OtherNodeEntity->Next;
+				goto goto_skip;
 			}
 
-			if(!NodeEntity->Next)
+#if QUADTREE_DEDUPE_COLLISIONS == 1
+			uint32_t IndexA = EntityIdx;
+			uint32_t IndexB = OtherEntityIdx;
+
+			if(IndexA > IndexB)
+			{
+				uint32_t Temp = IndexA;
+				IndexA = IndexB;
+				IndexB = Temp;
+			}
+
+			uint32_t Hash = IndexA * 48611 + IndexB * 50261;
+			Hash %= HashTableSize;
+
+			uint32_t Index = HashTable[Hash];
+			QuadtreeHTEntry* Entry;
+
+			while(Index)
+			{
+				Entry = HTEntries + Index;
+
+				if(Entry->Idx[0] == IndexA && Entry->Idx[1] == IndexB)
+				{
+					goto goto_skip;
+				}
+
+				Index = Entry->Next;
+			}
+
+			if(HTEntriesUsed >= HTEntriesSize)
+			{
+				uint32_t NewSize = (HTEntriesUsed << 1) | 1;
+
+				HTEntries = QT_REMALLOC(sizeof(*HTEntries) * HTEntriesSize,
+					HTEntries, sizeof(*HTEntries) * NewSize);
+				AssertNEQ(HTEntries, NULL);
+
+				HTEntriesSize = NewSize;
+			}
+
+			uint32_t EntryIdx = HTEntriesUsed++;
+			Entry = HTEntries + EntryIdx;
+
+			Entry->Idx[0] = IndexA;
+			Entry->Idx[1] = IndexB;
+			Entry->Next = Index;
+			HashTable[Hash] = EntryIdx;
+#endif
+
+			Callback(QT, &Entity->Data, &OtherEntity->Data);
+
+			goto_skip:;
+
+			if(!OtherNodeEntity->Next)
 			{
 				break;
 			}
-
-			NodeEntity = NodeEntities + NodeEntity->Next;
-			Entity = Entities + NodeEntity->Entity;
 		}
 	}
-
-#if QUADTREE_DEDUPE_COLLISIONS == 1
-	QT->HTEntries = HTEntries;
-	QT->HTEntriesSize = HTEntriesSize;
-
-	QT_FREE(sizeof(*HashTable) * HashTableSize, HashTable);
-#endif
-}
-
-
-void
-QuadtreeCollideFast(
-	Quadtree* QT,
-	QuadtreeCollideT Callback
-	)
-{
-	QuadtreeNode* Node = QT->Nodes;
-	QuadtreeNode* EndNode = QT->Nodes + QT->NodesUsed;
-
-#if QUADTREE_DEDUPE_COLLISIONS == 1
-	uint32_t HashTableSize = QT->EntitiesUsed * QUADTREE_HASH_TABLE_FACTOR;
-	uint32_t* HashTable = QT_CALLOC(sizeof(*HashTable) * HashTableSize);
-	AssertNEQ(HashTable, NULL);
-
-	QuadtreeHTEntry* HTEntries = QT->HTEntries;
-
-	uint32_t HTEntriesUsed = 1;
-	uint32_t HTEntriesSize = QT->HTEntriesSize;
-#endif
-
-	QuadtreeNodeEntity* NodeEntities = QT->NodeEntities;
-	QuadtreeEntity* Entities = QT->Entities;
-
-	while(Node != EndNode)
-	{
-		if(Node->Count == -1 || !Node->Head)
-		{
-			++Node;
-			continue;
-		}
-
-		QuadtreeNodeEntity* NodeEntity = NodeEntities + Node->Head;
-		++Node;
-
-		QuadtreeEntity* Entity = Entities + NodeEntity->Entity;
-
-		while(NodeEntity->Next)
-		{
-			QuadtreeNodeEntity* OtherNodeEntity = NodeEntities + NodeEntity->Next;
-
-			while(1)
-			{
-				uint32_t IndexA = NodeEntity->Entity;
-				uint32_t IndexB = OtherNodeEntity->Entity;
-
-				if(NodeEntity->Entity == OtherNodeEntity->Entity)
-				{
-					goto goto_skip;
-				}
-
-				QuadtreeEntity* OtherEntity = Entities + OtherNodeEntity->Entity;
-
-				if(!QuadtreeIntersects(
-					QuadtreeGetEntityRectExtent(Entity),
-					QuadtreeGetEntityRectExtent(OtherEntity)
-					))
-				{
-					goto goto_skip;
-				}
-
-#if QUADTREE_DEDUPE_COLLISIONS == 1
-				if(IndexA > IndexB)
-				{
-					uint32_t Temp = IndexA;
-					IndexA = IndexB;
-					IndexB = Temp;
-				}
-
-				uint32_t Hash = IndexA * 48611 + IndexB * 50261;
-				Hash %= HashTableSize;
-
-				uint32_t Index = HashTable[Hash];
-				QuadtreeHTEntry* Entry;
-
-				while(Index)
-				{
-					Entry = HTEntries + Index;
-
-					if(Entry->Idx[0] == IndexA && Entry->Idx[1] == IndexB)
-					{
-						goto goto_skip;
-					}
-
-					Index = Entry->Next;
-				}
-
-				if(HTEntriesUsed >= HTEntriesSize)
-				{
-					uint32_t NewSize = (HTEntriesUsed << 1) | 1;
-
-					HTEntries = QT_REMALLOC(sizeof(*HTEntries) * HTEntriesSize,
-						HTEntries, sizeof(*HTEntries) * NewSize);
-					AssertNEQ(HTEntries, NULL);
-
-					HTEntriesSize = NewSize;
-				}
-
-				uint32_t EntryIdx = HTEntriesUsed++;
-				Entry = HTEntries + EntryIdx;
-
-				Entry->Idx[0] = IndexA;
-				Entry->Idx[1] = IndexB;
-				Entry->Next = Index;
-				HashTable[Hash] = EntryIdx;
-#endif
-
-				Callback(QT, &Entity->Data, &OtherEntity->Data);
-
-
-				goto_skip:
-
-				if(!OtherNodeEntity->Next)
-				{
-					break;
-				}
-
-				OtherNodeEntity = NodeEntities + OtherNodeEntity->Next;
-			}
-
-			if(!NodeEntity->Next)
-			{
-				break;
-			}
-
-			NodeEntity = NodeEntities + NodeEntity->Next;
-			Entity = Entities + NodeEntity->Entity;
-		}
-	}
+	while(NodeEntity != NodeEntitiesEnd);
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	QT->HTEntries = HTEntries;

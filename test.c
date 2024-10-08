@@ -28,10 +28,10 @@ ENTITY;
 #define RADIUS_ODDS 2500.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 1024.0f
-#define MIN_SIZE 32.0f
+#define MIN_SIZE 16.0f
 #define ARENA_WIDTH 100000.0f
 #define ARENA_HEIGHT 100000.0f
-#define MEASURE_TICKS 60
+#define MEASURE_TICKS 100
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
 #define CANT_ESCAPE_AREA 1
@@ -349,10 +349,12 @@ Init(
 static void
 QueryIgnore(
 	Quadtree* QT,
-	QuadtreeEntity* Entity
+	uint32_t EntityIdx,
+	ENTITY* Entity
 	)
 {
 	(void) QT;
+	(void) EntityIdx;
 	(void) Entity;
 }
 
@@ -371,7 +373,7 @@ Tick(
 	}
 
 	Start = GetTime();
-	QuadtreeCollideSlow(&QT, CollideEntities);
+	QuadtreeCollide(&QT, CollideEntities);
 	End = GetTime();
 	Time = Measure(&MeasureCollide, End - Start);
 	if(Time)
@@ -394,9 +396,15 @@ Tick(
 	Start = GetTime();
 	for(int i = 1; i <= QUERIES_NUM; ++i)
 	{
-		QuadtreeHalfExtent Extent = QuadtreeRectToHalfExtent(QT.Entities[i].Extent);
-		QuadtreeQuery(
-			&QT, QuadtreeHalfToRectExtent((QuadtreeHalfExtent){ Extent.X, Extent.Y, 1920 * 0.5f, 1080 * 0.5f }), QueryIgnore);
+		QuadtreeRectExtent Extent =
+		(QuadtreeRectExtent)
+		{
+			.MinX = QT.Entities[i].Data.Extent.MinX - 1920.0f * 0.5f,
+			.MaxX = QT.Entities[i].Data.Extent.MaxX + 1920.0f * 0.5f,
+			.MinY = QT.Entities[i].Data.Extent.MinY - 1080.0f * 0.5f,
+			.MaxY = QT.Entities[i].Data.Extent.MaxY + 1080.0f * 0.5f
+		};
+		QuadtreeQuery(&QT, Extent, QueryIgnore);
 	}
 	End = GetTime();
 	Time = Measure(&MeasureQuery, End - Start);
