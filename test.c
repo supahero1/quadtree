@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include "quadtree_types.h"
 
 
@@ -19,6 +21,7 @@ ENTITY;
 #include "quadtree.c"
 
 #include <stdio.h>
+#include <sched.h>
 #include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -31,7 +34,7 @@ ENTITY;
 #define MIN_SIZE 16.0f
 #define ARENA_WIDTH 100000.0f
 #define ARENA_HEIGHT 100000.0f
-#define MEASURE_TICKS 100
+#define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
 #define CANT_ESCAPE_AREA 1
@@ -53,6 +56,7 @@ MEASUREMENT;
 static MEASUREMENT MeasureNormalize;
 static MEASUREMENT MeasureCollide;
 static MEASUREMENT MeasureUpdate;
+static MEASUREMENT MeasureRdtsc;
 #if DO_THEM_QUERIES == 1
 static MEASUREMENT MeasureQuery;
 #endif
@@ -415,14 +419,51 @@ Tick(
 #endif
 }
 
+static inline uint64_t
+rdtsc_start()
+{
+	uint32_t hi, lo;
+	__asm__ volatile("CPUID\n\t"
+					 "RDTSC\n\t"
+					 "mov %%edx, %0\n\t"
+					 "mov %%eax, %1\n\t"
+					 : "=r" (hi), "=r" (lo)
+					 :: "%rax", "%rbx", "%rcx", "%rdx");
+	return ((uint64_t) hi << 32) | lo;
+}
+
+static inline uint64_t
+rdtsc_end()
+{
+	uint32_t hi, lo;
+	__asm__ volatile("RDTSCP\n\t"
+					 "mov %%edx, %0\n\t"
+					 "mov %%eax, %1\n\t"
+					 "CPUID\n\t"
+					 : "=r" (hi), "=r" (lo)
+					 :: "%rax", "%rbx", "%rcx", "%rdx");
+	return ((uint64_t) hi << 32) | lo;
+}
+
 int
 main()
 {
 	DrawInit();
 
+	struct sched_param Param;
+	Param.sched_priority = 99;
+	int Status = sched_setscheduler(0, SCHED_FIFO, &Param);
+	AssertEQ(Status, 0);
+
+	cpu_set_t Set;
+	CPU_ZERO(&Set);
+	CPU_SET(0, &Set);
+	Status = sched_setaffinity(0, sizeof(Set), &Set);
+	AssertEQ(Status, 0);
+
 	uint64_t Seed = GetTime() * 100000;
 	printf("Seed: %lu\n", Seed);
-	srand(Seed);
+	srand(5);
 
 	QT.RectExtent =
 	(QuadtreeRectExtent)
@@ -455,7 +496,14 @@ main()
 			break;
 		}
 
+		uint64_t Start = rdtsc_start();
 		Tick();
+		uint64_t End = rdtsc_end();
+		Time = Measure(&MeasureRdtsc, End - Start);
+		if(Time)
+		{
+			printf("RDTSC: %.02lf\n", Time);
+		}
 
 		QuadtreeRectExtent RectView = QuadtreeHalfToRectExtent(View);
 
@@ -463,6 +511,8 @@ main()
 		QuadtreeQuery(&QT, RectView, DrawEntity);
 
 		DrawEnd();
+
+		sched_yield();
 	}
 
 	DrawFree();

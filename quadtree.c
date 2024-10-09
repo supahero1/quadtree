@@ -659,7 +659,7 @@ QuadtreeNormalize(
 			NewNodes[Info.ParentNodeIdx].Heads[Info.HeadIdx] = NewNodeIdx;
 
 			if(Node->Count == -1)
-			{//TODO instead of node entity removals do full removal followed by fresh insertion, then update count at every parent
+			{
 				uint32_t Total = 0;
 				uint32_t MaxIdx = 0;
 				uint32_t MaxCount = 0;
@@ -758,7 +758,7 @@ QuadtreeNormalize(
 					FreeNode = ChildIdx;
 				}
 
-				goto goto_leaf; // TODO copy to new node right away
+				goto goto_leaf;
 
 				goto_parent:;
 
@@ -1434,4 +1434,3 @@ QuadtreeCollide(
 
 
 #undef QuadtreeDescend
-
