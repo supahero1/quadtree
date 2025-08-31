@@ -56,6 +56,7 @@ typedef struct QuadtreeEntity
 
 	uint32_t QueryTick;
 	uint8_t UpdateTick;
+	bool FullyInNode;
 }
 QuadtreeEntity;
 
@@ -175,6 +176,7 @@ struct Quadtree
 	uint32_t EntitiesUsed;
 	uint32_t EntitiesSize;
 
+	uint32_t HTEntriesUsed;
 	uint32_t HTEntriesSize;
 
 	uint32_t RemovalsUsed;

@@ -27,13 +27,13 @@ ENTITY;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(200000)
-#define RADIUS_ODDS 2500.0f
+#define ITER UINT32_C(70000)
+#define RADIUS_ODDS 5000.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 1024.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 100000.0f
-#define ARENA_HEIGHT 100000.0f
+#define ARENA_WIDTH 10000.0f
+#define ARENA_HEIGHT 10000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f

@@ -4,13 +4,10 @@
 #include <stdbool.h>
 
 /* Above or equal, if can, 1 node splits into 4 */
-#define QUADTREE_SPLIT_THRESHOLD 8
+#define QUADTREE_SPLIT_THRESHOLD 15
 
 /* Below or equal, if can, 4 nodes merge into 1 */
-#define QUADTREE_MERGE_THRESHOLD 7
-
-/* You might want to increase this if you get a lot of collisions per tick */
-#define QUADTREE_HASH_TABLE_FACTOR 1
+#define QUADTREE_MERGE_THRESHOLD 13
 
 #define QUADTREE_DEDUPE_COLLISIONS 1
 
