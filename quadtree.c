@@ -702,6 +702,17 @@ QuadtreeNormalize(
 
 						Node->PositionFlags |= Child->PositionFlags;
 
+						if(Node->Count == 0)
+						{
+							Node->Count = Child->Count;
+							Node->Head = Child->Head;
+
+							Child->Next = FreeNode;
+							FreeNode = ChildIdx;
+
+							continue;
+						}
+
 						uint32_t NodeEntityIdx = Child->Head;
 						while(NodeEntityIdx)
 						{
