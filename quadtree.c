@@ -534,9 +534,6 @@ QuadtreeNormalize(
 					NodeEntity = NodeEntities + NodeEntityIdx;
 				}
 
-				NodeEntityIdx = NodeEntitiesUsed++;
-				NodeEntity = NodeEntities + NodeEntityIdx;
-
 				NodeEntity->Next = Node->Head;
 				NodeEntity->Entity = EntityIdx;
 				Node->Head = NodeEntityIdx;
