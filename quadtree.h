@@ -28,7 +28,7 @@
 #define QUADTREE_DEDUPE_COLLISIONS 1
 
 /* Do not modify unless you know what you are doing. Use octree.min_size. */
-#define QUADTREE_MAX_DEPTH 20
+#define QUADTREE_MAX_DEPTH 30
 
 /* Do not modify */
 #define QUADTREE_DFS_LENGTH (QUADTREE_MAX_DEPTH * 3 + 1)
@@ -301,4 +301,10 @@ extern void
 quadtree_collide(
 	quadtree_t* qt,
 	quadtree_collide_fn_t collide_fn
+	);
+
+
+extern uint32_t
+quadtree_depth(
+	const quadtree_t* qt
 	);
