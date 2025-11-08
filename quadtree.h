@@ -20,10 +20,10 @@
 #include "alloc/include/macro.h"
 
 /* Above or equal, if can, 1 node splits into 4 */
-#define QUADTREE_SPLIT_THRESHOLD 15
+#define QUADTREE_SPLIT_THRESHOLD 17
 
 /* Below or equal, if can, 4 nodes merge into 1 */
-#define QUADTREE_MERGE_THRESHOLD 13
+#define QUADTREE_MERGE_THRESHOLD 16
 
 #define QUADTREE_DEDUPE_COLLISIONS 1
 
@@ -33,23 +33,30 @@
 /* Do not modify */
 #define QUADTREE_DFS_LENGTH (QUADTREE_MAX_DEPTH * 3 + 1)
 
+#define QUADTREE_MERGE_HT_SIZE MACRO_NEXT_OR_EQUAL_POWER_OF_2_CONST(QUADTREE_MERGE_THRESHOLD * 2)
 
-typedef struct quadtree_node
+
+typedef enum quadtree_node_type
 {
-	int32_t count;
+	QUADTREE_NODE_TYPE_LEAF,
+	MACRO_ENUM_BITS(QUADTREE_NODE_TYPE)
+}
+quadtree_node_type_t;
 
-	union
+
+typedef union quadtree_node
+{
+	uint32_t next;
+
+	struct
 	{
-		uint32_t next;
-
-		struct
-		{
-			uint32_t head;
-			uint32_t position_flags;
-		};
-
-		uint32_t heads[4];
+		uint32_t head;
+		uint32_t position_flags;
+		uint32_t count;
+		quadtree_node_type_t type;
 	};
+
+	uint32_t heads[4];
 }
 quadtree_node_t;
 
@@ -197,6 +204,7 @@ struct quadtree
 	quadtree_node_removal_t* node_removals;
 	quadtree_insertion_t* insertions;
 	quadtree_reinsertion_t* reinsertions;
+	uint32_t* merge_ht;
 
 	uint32_t nodes_used;
 	uint32_t nodes_size;

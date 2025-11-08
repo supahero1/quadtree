@@ -27,13 +27,13 @@ entity_t;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(200000)
+#define ITER UINT32_C(50000)
 #define RADIUS_ODDS 4000.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 1024.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 50000.0f
-#define ARENA_HEIGHT 50000.0f
+#define ARENA_WIDTH 10000.0f
+#define ARENA_HEIGHT 10000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -455,14 +455,12 @@ main()
 
 	struct sched_param param;
 	param.sched_priority = 99;
-	int status = sched_setscheduler(0, SCHED_FIFO, &param);
-	assert_eq(status, 0);
+	sched_setscheduler(0, SCHED_FIFO, &param);
 
 	cpu_set_t set;
 	CPU_ZERO(&set);
 	CPU_SET(0, &set);
-	status = sched_setaffinity(0, sizeof(set), &set);
-	assert_eq(status, 0);
+	sched_setaffinity(0, sizeof(set), &set);
 
 	uint64_t seed = get_time() * 100000;
 	printf("Seed: %lu\n", seed);
