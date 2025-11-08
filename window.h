@@ -1,69 +1,58 @@
 #pragma once
 
-#include "quadtree_types.h"
-
+#include "extent.h"
 
 double
-GetTime(
+get_time(
 	void
 	);
 
-
-extern QuadtreeHalfExtent View;
-
+extern half_extent_t view;
 
 extern void
-SetCameraPos(
-	float X, float Y
+set_camera_pos(
+	float x, float y
 	);
 
-
-typedef struct RECT
+typedef struct rect_t
 {
-	int MinX, MinY, MaxX, MaxY;
+	int min_x, min_y, max_x, max_y;
 }
-RECT;
+rect_t;
 
-
-extern RECT
-ToScreen(
-	QuadtreeRectExtent Extent
+extern rect_t
+to_screen(
+	rect_extent_t extent
 	);
 
-
 extern void
-PaintPixel(
-	int X, int Y,
-	uint32_t Color
+paint_pixel(
+	int x, int y,
+	uint32_t color
 	);
 
-
 extern void
-DrawInit(
+draw_init(
 	void
 	);
 
-
-enum DRAW_STATE
+enum draw_state_t
 {
-	DRAW_OK,
-	DRAW_STOP
+	DRAW_STATE_OK,
+	DRAW_STATE_STOP
 };
 
-
-extern enum DRAW_STATE
-DrawStart(
+extern enum draw_state_t
+draw_start(
 	void
 	);
 
-
 extern void
-DrawEnd(
+draw_end(
 	void
 	);
 
-
 extern void
-DrawFree(
+draw_free(
 	void
 	);

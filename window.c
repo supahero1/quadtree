@@ -1,9 +1,9 @@
 #include <GLFW/glfw3.h>
 
 #include "window.h"
+#include "alloc/include/alloc_ext.h"
 
 #include <assert.h>
-#include <stdlib.h>
 #include <string.h>
 
 #define WIDTH 1600
@@ -25,166 +25,157 @@
     _a > _b ? _a : _b;          \
 })
 
-typedef struct POSITION
+typedef struct position_t
 {
-	double X, Y;
+	double x, y;
 }
-POSITION;
+position_t;
 
-static uint32_t* Pixels;
-static GLFWwindow* Window;
-static POSITION Mouse = {0};
-static POSITION Camera = {0};
-static POSITION TargetCamera = {0};
-static double FoV = 1;
-static double TargetFoV = 1;
-static int Pressing = 0;
-static int MouseMoved = 0;
+static uint32_t* pixels;
+static GLFWwindow* window;
+static position_t mouse = {0};
+static position_t camera = {0};
+static position_t target_camera = {0};
+static double fov = 1;
+static double target_fov = 1;
+static int pressing = 0;
+static int mouse_moved = 0;
 
-QuadtreeHalfExtent View = {0};
+half_extent_t view = {0};
 
-static int Error;
-
+static int error;
 
 double
-GetTime(
+get_time(
 	void
 	)
 {
 	return glfwGetTime() * 1000.0f;
 }
 
-
 static double
-Lerp(
-	double Start,
-	double End
+lerp(
+	double start,
+	double end
 	)
 {
-	return Start + (End - Start) * LERP_FACTOR;
+	return start + (end - start) * LERP_FACTOR;
 }
-
 
 void
-SetCameraPos(
-	float X, float Y
+set_camera_pos(
+	float x, float y
 	)
 {
-	TargetCamera.X = X;
-	TargetCamera.Y = Y;
+	target_camera.x = x;
+	target_camera.y = y;
 }
 
-
-RECT
-ToScreen(
-	QuadtreeRectExtent Extent
+rect_t
+to_screen(
+	rect_extent_t extent
 	)
 {
-	RECT Rect =
-	(RECT)
+	rect_t rect =
+	(rect_t)
 	{
-		.MinX = (Extent.MinX - Camera.X) * FoV + WIDTH * 0.5f,
-		.MinY = (Extent.MinY - Camera.Y) * FoV + HEIGHT * 0.5f,
-		.MaxX = (Extent.MaxX - Camera.X) * FoV + WIDTH * 0.5f,
-		.MaxY = (Extent.MaxY - Camera.Y) * FoV + HEIGHT * 0.5f
+		.min_x = (extent.min_x - camera.x) * fov + WIDTH * 0.5f,
+		.min_y = (extent.min_y - camera.y) * fov + HEIGHT * 0.5f,
+		.max_x = (extent.max_x - camera.x) * fov + WIDTH * 0.5f,
+		.max_y = (extent.max_y - camera.y) * fov + HEIGHT * 0.5f
 	};
 
-	Rect.MinX = MAX(-1, MIN(Rect.MinX, WIDTH ));
-	Rect.MaxX = MAX(-1, MIN(Rect.MaxX, WIDTH ));
+	rect.min_x = MAX(-1, MIN(rect.min_x, WIDTH ));
+	rect.max_x = MAX(-1, MIN(rect.max_x, WIDTH ));
 
-	Rect.MinY = MAX(-1, MIN(Rect.MinY, HEIGHT));
-	Rect.MaxY = MAX(-1, MIN(Rect.MaxY, HEIGHT));
+	rect.min_y = MAX(-1, MIN(rect.min_y, HEIGHT));
+	rect.max_y = MAX(-1, MIN(rect.max_y, HEIGHT));
 
-	return Rect;
+	return rect;
 }
-
 
 void
-PaintPixel(
-	int X, int Y,
-	uint32_t Color
+paint_pixel(
+	int x, int y,
+	uint32_t color
 	)
 {
-	if(X >= 0 && X < WIDTH && Y >= 0 && Y < HEIGHT)
+	if(x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT)
 	{
-		Pixels[X + Y * WIDTH] = Color;
+		pixels[x + y * WIDTH] = color;
 	}
 }
-
 
 static void
-MouseButtonCallback(
-	GLFWwindow* Window,
-	int Button,
-	int Action,
-	int Mods
+mouse_button_callback(
+	GLFWwindow* window,
+	int button,
+	int action,
+	int mods
 	)
 {
-	if(Action == GLFW_PRESS)
+	if(action == GLFW_PRESS)
 	{
-		Pressing = 1;
-		MouseMoved = 0;
+		pressing = 1;
+		mouse_moved = 0;
 	}
-	else if(Action == GLFW_RELEASE)
+	else if(action == GLFW_RELEASE)
 	{
-		Pressing = 0;
+		pressing = 0;
 	}
 }
-
 
 static void
-MouseMoveCallback(
-	GLFWwindow* Window,
-	double X,
-	double Y
+mouse_move_callback(
+	GLFWwindow* window,
+	double x,
+	double y
 	)
 {
-	MouseMoved = 1;
-	Y = HEIGHT - Y;
+	mouse_moved = 1;
+	y = HEIGHT - y;
 
-	double DiffX = X - Mouse.X;
-	double DiffY = Y - Mouse.Y;
+	double diff_x = x - mouse.x;
+	double diff_y = y - mouse.y;
 
-	Mouse.X = X;
-	Mouse.Y = Y;
+	mouse.x = x;
+	mouse.y = y;
 
-	if(Pressing)
+	if(pressing)
 	{
-		TargetCamera.X -= DiffX / FoV;
-		TargetCamera.Y -= DiffY / FoV;
+		target_camera.x -= diff_x / fov;
+		target_camera.y -= diff_y / fov;
 	}
 }
 
-
 static void
-MouseScrollCallback(
-	GLFWwindow* Window,
-	double OffsetX,
-	double OffsetY
+mouse_scroll_callback(
+	GLFWwindow* window,
+	double offset_x,
+	double offset_y
 	)
 {
-	TargetFoV += OffsetY * SCROLL_FACTOR * TargetFoV;
+	target_fov += offset_y * SCROLL_FACTOR * target_fov;
 }
-
 
 void
-DrawInit(
+draw_init(
 	void
 	)
 {
-	Error = glfwInit();
-	assert(Error == GLFW_TRUE);
+	error = glfwInit();
+	assert(error == GLFW_TRUE);
 
-	Window = glfwCreateWindow(WIDTH, HEIGHT, "Quadtree", NULL, NULL);
-	assert(Window);
+	window = glfwCreateWindow(WIDTH, HEIGHT, "Quadtree", NULL, NULL);
+	assert(window);
 
-	glfwSetMouseButtonCallback(Window, MouseButtonCallback);
-	glfwSetCursorPosCallback(Window, MouseMoveCallback);
-	glfwSetScrollCallback(Window, MouseScrollCallback);
+	glfwSetMouseButtonCallback(window, mouse_button_callback);
+	glfwSetCursorPosCallback(window, mouse_move_callback);
+	glfwSetScrollCallback(window, mouse_scroll_callback);
 
-	glfwSetWindowSizeLimits(Window, WIDTH, HEIGHT, WIDTH, HEIGHT);
+	glfwSetWindowSizeLimits(window, WIDTH, HEIGHT, WIDTH, HEIGHT);
 
-	glfwMakeContextCurrent(Window);
+	glfwMakeContextCurrent(window);
 
 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 	glMatrixMode(GL_PROJECTION);
@@ -195,66 +186,63 @@ DrawInit(
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	Pixels = malloc(sizeof(*Pixels) * WIDTH * HEIGHT);
-	assert(Pixels);
+	pixels = alloc_malloc(pixels, WIDTH * HEIGHT);
+	assert(pixels);
 }
 
-
-enum DRAW_STATE
-DrawStart(
+enum draw_state_t
+draw_start(
 	void
 	)
 {
-	memset(Pixels, 0xff, sizeof(*Pixels) * WIDTH * HEIGHT);
+	memset(pixels, 0xff, sizeof(*pixels) * WIDTH * HEIGHT);
 
-	if(glfwWindowShouldClose(Window))
+	if(glfwWindowShouldClose(window))
 	{
-		return DRAW_STOP;
+		return DRAW_STATE_STOP;
 	}
 
 	glfwPollEvents();
 
-	FoV = Lerp(FoV, TargetFoV);
-	Camera =
-	(POSITION)
+	fov = lerp(fov, target_fov);
+	camera =
+	(position_t)
 	{
-		.X = Lerp(Camera.X, TargetCamera.X),
-		.Y = Lerp(Camera.Y, TargetCamera.Y)
+		.x = lerp(camera.x, target_camera.x),
+		.y = lerp(camera.y, target_camera.y)
 	};
-	View =
-	(QuadtreeHalfExtent)
+	view =
+	(half_extent_t)
 	{
-		.X = Camera.X,
-		.Y = Camera.Y,
-		.W = WIDTH  * 0.5f / FoV,
-		.H = HEIGHT * 0.5f / FoV
+		.x = camera.x,
+		.y = camera.y,
+		.w = WIDTH  * 0.5f / fov,
+		.h = HEIGHT * 0.5f / fov
 	};
 
-	return DRAW_OK;
+	return DRAW_STATE_OK;
 }
 
-
 void
-DrawEnd(
+draw_end(
 	void
 	)
 {
 	glClear(GL_COLOR_BUFFER_BIT);
-	glDrawPixels(WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, Pixels);
+	glDrawPixels(WIDTH, HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	glFlush();
-	glfwSwapBuffers(Window);
+	glfwSwapBuffers(window);
 }
 
-
 void
-DrawFree(
+draw_free(
 	void
 	)
 {
-	free(Pixels);
+	alloc_free(pixels, WIDTH * HEIGHT);
 
 	glDisable(GL_BLEND);
 
-	glfwDestroyWindow(Window);
+	glfwDestroyWindow(window);
 	glfwTerminate();
 }

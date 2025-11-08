@@ -1,4 +1,4 @@
-CORE_F := -Wall -Wno-unused-function -Wno-address-of-packed-member
+CORE_F := -D_GNU_SOURCE -Wall -Wno-unused-function -Wno-address-of-packed-member
 FLAGS  := -Ofast -march=native -DNDEBUG $(CORE_F)
 # FLAGS  := -O0 -g3 -ggdb -D_FORTIFY_SOURCE=3 -rdynamic $(CORE_F)
 # FLAGS  := -O3 -g3 -DNDEBUG $(CORE_F)

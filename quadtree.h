@@ -1,263 +1,296 @@
+/*
+ *   Copyright 2025 Franciszek Balcerak
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+
 #pragma once
 
-#include "quadtree_types.h"
+#include "extent.h"
+#include "alloc/include/macro.h"
+
+/* Above or equal, if can, 1 node splits into 4 */
+#define QUADTREE_SPLIT_THRESHOLD 15
+
+/* Below or equal, if can, 4 nodes merge into 1 */
+#define QUADTREE_MERGE_THRESHOLD 13
+
+#define QUADTREE_DEDUPE_COLLISIONS 1
+
+/* Do not modify unless you know what you are doing. Use octree.min_size. */
+#define QUADTREE_MAX_DEPTH 20
+
+/* Do not modify */
+#define QUADTREE_DFS_LENGTH (QUADTREE_MAX_DEPTH * 3 + 1)
 
 
-typedef struct QuadtreeNode
+typedef struct quadtree_node
 {
-	int32_t Count;
+	int32_t count;
 
 	union
 	{
-		uint32_t Next;
+		uint32_t next;
 
 		struct
 		{
-			uint32_t Head;
-			uint32_t PositionFlags;
+			uint32_t head;
+			uint32_t position_flags;
 		};
 
-		uint32_t Heads[4];
+		uint32_t heads[4];
 	};
 }
-QuadtreeNode;
+quadtree_node_t;
 
 
-typedef struct QuadtreeNodeEntity
+typedef struct quadtree_node_entity
 {
-	uint32_t Next;
-	uint32_t Entity;
+	uint32_t next;
+	uint32_t entity;
 }
-QuadtreeNodeEntity;
+quadtree_node_entity_t;
 
 
-#ifndef QuadtreeEntityData
+#ifndef quadtree_entity_data
 
 
-	typedef struct QuadtreeEntityDataT
+	typedef struct quadtree_entity_data
 	{
-		QuadtreeRectExtent RectExtent;
+		rect_extent_t rect_extent;
 	}
-	QuadtreeEntityDataT;
+	quadtree_entity_data_t;
 
 
-	#define QuadtreeEntityData QuadtreeEntityDataT
-	#define QuadtreeGetEntityDataRectExtent(Entity) (Entity).RectExtent
+	#define quadtree_entity_data quadtree_entity_data_t
+	#define quadtree_get_entity_data_rect_extent(entity) (entity).rect_extent
 #endif
 
 
-typedef struct QuadtreeEntity
+typedef struct quadtree_entity
 {
 	union
 	{
-		QuadtreeEntityData Data;
-		uint32_t Next;
+		quadtree_entity_data data;
+		uint32_t next;
 	};
 
-	uint32_t QueryTick;
-	uint8_t UpdateTick;
-	bool FullyInNode;
+	uint32_t query_tick;
+	uint8_t update_tick;
+	bool fully_in_node;
 }
-QuadtreeEntity;
+quadtree_entity_t;
 
 
-#define QuadtreeGetEntityRectExtent(Entity)	\
-QuadtreeGetEntityDataRectExtent((Entity)->Data)
+#define quadtree_get_entity_rect_extent(entity)	\
+quadtree_get_entity_data_rect_extent((entity)->data)
 
 
-typedef struct QuadtreeNodeInfo
+typedef struct quadtree_node_info
 {
-	uint32_t NodeIdx;
-	QuadtreeHalfExtent Extent;
+	uint32_t node_idx;
+	half_extent_t extent;
 }
-QuadtreeNodeInfo;
+quadtree_node_info_t;
 
 
-typedef struct QuadtreeHTEntry
+typedef struct quadtree_ht_entry
 {
-	uint32_t Next;
-	uint32_t Idx[2];
+	uint32_t next;
+	uint32_t idx[2];
 }
-QuadtreeHTEntry;
+quadtree_ht_entry_t;
 
 
-typedef struct QuadtreeRemoval
+typedef struct quadtree_removal
 {
-	uint32_t EntityIdx;
+	uint32_t entity_idx;
 }
-QuadtreeRemoval;
+quadtree_removal_t;
 
 
-typedef struct QuadtreeNodeRemoval
+typedef struct quadtree_node_removal
 {
-	uint32_t NodeIdx;
-	uint32_t NodeEntityIdx;
-	uint32_t PrevNodeEntityIdx;
+	uint32_t node_idx;
+	uint32_t node_entity_idx;
+	uint32_t prev_node_entity_idx;
 }
-QuadtreeNodeRemoval;
+quadtree_node_removal_t;
 
 
-typedef struct QuadtreeInsertion
+typedef struct quadtree_insertion
 {
-	QuadtreeEntityData Data;
+	quadtree_entity_data data;
 }
-QuadtreeInsertion;
+quadtree_insertion_t;
 
 
-typedef struct QuadtreeReinsertion
+typedef struct quadtree_reinsertion
 {
-	uint32_t EntityIdx;
+	uint32_t entity_idx;
 }
-QuadtreeReinsertion;
+quadtree_reinsertion_t;
 
 
-typedef enum QuadtreeStatus
+typedef enum quadtree_status
 {
 	QUADTREE_STATUS_CHANGED,
 	QUADTREE_STATUS_NOT_CHANGED,
-	kQUADTREE_STATUS
+	MACRO_ENUM_BITS(QUADTREE_STATUS)
 }
-QuadtreeStatus;
+quadtree_status_t;
 
 
-typedef struct Quadtree Quadtree;
-
-
-typedef void
-(*QuadtreeQueryT)(
-	Quadtree* QT,
-	uint32_t EntityIdx,
-	QuadtreeEntityData* Entity
-	);
+typedef struct quadtree quadtree_t;
 
 
 typedef void
-(*QuadtreeNodeQueryT)(
-	Quadtree* QT,
-	const QuadtreeNodeInfo* Info
+(*quadtree_query_fn_t)(
+	quadtree_t* qt,
+	uint32_t entity_idx,
+	quadtree_entity_data* entity
 	);
 
 
 typedef void
-(*QuadtreeCollideT)(
-	const Quadtree* QT,
-	QuadtreeEntityData* EntityA,
-	QuadtreeEntityData* EntityB
+(*quadtree_node_query_fn_t)(
+	quadtree_t* qt,
+	const quadtree_node_info_t* info
 	);
 
 
-typedef QuadtreeStatus
-(*QuadtreeUpdateT)(
-	Quadtree* QT,
-	uint32_t EntityIdx,
-	QuadtreeEntityData* Entity
+typedef void
+(*quadtree_collide_fn_t)(
+	const quadtree_t* qt,
+	quadtree_entity_data* entity_a,
+	quadtree_entity_data* entity_b
 	);
 
 
-struct Quadtree
+typedef quadtree_status_t
+(*quadtree_update_fn_t)(
+	quadtree_t* qt,
+	uint32_t entity_idx,
+	quadtree_entity_data* entity
+	);
+
+
+struct quadtree
 {
-	QuadtreeNode* Nodes;
-	QuadtreeNodeEntity* NodeEntities;
-	QuadtreeEntity* Entities;
+	quadtree_node_t* nodes;
+	quadtree_node_entity_t* node_entities;
+	quadtree_entity_t* entities;
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	QuadtreeHTEntry* HTEntries;
+	quadtree_ht_entry_t* ht_entries;
 #endif
-	QuadtreeRemoval* Removals;
-	QuadtreeNodeRemoval* NodeRemovals;
-	QuadtreeInsertion* Insertions;
-	QuadtreeReinsertion* Reinsertions;
+	quadtree_removal_t* removals;
+	quadtree_node_removal_t* node_removals;
+	quadtree_insertion_t* insertions;
+	quadtree_reinsertion_t* reinsertions;
 
-	uint32_t NodesUsed;
-	uint32_t NodesSize;
+	uint32_t nodes_used;
+	uint32_t nodes_size;
 
-	uint32_t NodeEntitiesUsed;
-	uint32_t NodeEntitiesSize;
+	uint32_t node_entities_used;
+	uint32_t node_entities_size;
 
-	uint32_t EntitiesUsed;
-	uint32_t EntitiesSize;
+	uint32_t entities_used;
+	uint32_t entities_size;
 
-	uint32_t HTEntriesUsed;
-	uint32_t HTEntriesSize;
+#if QUADTREE_DEDUPE_COLLISIONS == 1
+	uint32_t ht_entries_used;
+	uint32_t ht_entries_size;
+#endif
 
-	uint32_t RemovalsUsed;
-	uint32_t RemovalsSize;
+	uint32_t removals_used;
+	uint32_t removals_size;
 
-	uint32_t NodeRemovalsUsed;
-	uint32_t NodeRemovalsSize;
+	uint32_t node_removals_used;
+	uint32_t node_removals_size;
 
-	uint32_t InsertionsUsed;
-	uint32_t InsertionsSize;
+	uint32_t insertions_used;
+	uint32_t insertions_size;
 
-	uint32_t ReinsertionsUsed;
-	uint32_t ReinsertionsSize;
+	uint32_t reinsertions_used;
+	uint32_t reinsertions_size;
 
-	uint32_t QueryTick;
-	uint8_t UpdateTick;
+	uint32_t query_tick;
+	uint8_t update_tick;
 
-	QuadtreeRectExtent RectExtent;
-	QuadtreeHalfExtent HalfExtent;
+	rect_extent_t rect_extent;
+	half_extent_t half_extent;
 
-	QuadtreePosition MinSize;
+	float min_size;
 };
 
 
 extern void
-QuadtreeInit(
-	Quadtree* QT
+quadtree_init(
+	quadtree_t* qt
 	);
 
 
 extern void
-QuadtreeFree(
-	Quadtree* QT
+quadtree_free(
+	quadtree_t* qt
 	);
 
 
 extern void
-QuadtreeInsert(
-	Quadtree* QT,
-	const QuadtreeEntityData* Data
+quadtree_insert(
+	quadtree_t* qt,
+	const quadtree_entity_data* data
 	);
 
 
 extern void
-QuadtreeRemove(
-	Quadtree* QT,
-	uint32_t EntityIdx
+quadtree_remove(
+	quadtree_t* qt,
+	uint32_t entity_idx
 	);
 
 
 extern void
-QuadtreeNormalize(
-	Quadtree* QT
+quadtree_normalize(
+	quadtree_t* qt
 	);
 
 
 extern void
-QuadtreeUpdate(
-	Quadtree* QT,
-	QuadtreeUpdateT Callback
+quadtree_update(
+	quadtree_t* qt,
+	quadtree_update_fn_t update_fn
 	);
 
 
 extern void
-QuadtreeQuery(
-	Quadtree* QT,
-	QuadtreeRectExtent Extent,
-	QuadtreeQueryT Callback
+quadtree_query(
+	quadtree_t* qt,
+	rect_extent_t extent,
+	quadtree_query_fn_t query_fn
 	);
 
 
 extern void
-QuadtreeQueryNodes(
-	Quadtree* QT,
-	QuadtreeRectExtent Extent,
-	QuadtreeNodeQueryT Callback
+quadtree_query_nodes(
+	quadtree_t* qt,
+	rect_extent_t extent,
+	quadtree_node_query_fn_t node_query_fn
 	);
 
 
 extern void
-QuadtreeCollide(
-	Quadtree* QT,
-	QuadtreeCollideT Callback
+quadtree_collide(
+	quadtree_t* qt,
+	quadtree_collide_fn_t collide_fn
 	);
