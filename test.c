@@ -162,10 +162,16 @@ update_entity(
 static void
 collide_entities(
 	const quadtree_t* qt,
+	uint32_t entity_a_idx,
 	entity_t* entity_a,
+	uint32_t entity_b_idx,
 	entity_t* entity_b
 	)
 {
+	(void) qt;
+	(void) entity_a_idx;
+	(void) entity_b_idx;
+
 	half_extent_t extent_a = rect_to_half_extent(entity_a->extent);
 	half_extent_t extent_b = rect_to_half_extent(entity_b->extent);
 
@@ -371,21 +377,12 @@ tick(
 	)
 {
 	start = get_time();
-	quadtree_normalize(&qt);
-	end = get_time();
-	time_elapsed = measure(&measure_normalize, end - start);
-	if(time_elapsed)
-	{
-		printf("\nNormalize: %.02lfms\n", time_elapsed);
-	}
-
-	start = get_time();
 	quadtree_collide(&qt, collide_entities);
 	end = get_time();
 	time_elapsed = measure(&measure_collide, end - start);
 	if(time_elapsed)
 	{
-		printf("Collide: %.02lfms\n", time_elapsed);
+		printf("\nCollide: %.02lfms\n", time_elapsed);
 	}
 
 	start = get_time();
@@ -395,6 +392,15 @@ tick(
 	if(time_elapsed)
 	{
 		printf("Update: %.02lfms\n", time_elapsed);
+	}
+
+	start = get_time();
+	quadtree_normalize(&qt);
+	end = get_time();
+	time_elapsed = measure(&measure_normalize, end - start);
+	if(time_elapsed)
+	{
+		printf("Normalize: %.02lfms\n", time_elapsed);
 		printf("Nodes: %u\n", qt.nodes_used);
 		printf("Node entities: %u\n", qt.node_entities_used);
 	}
