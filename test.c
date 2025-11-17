@@ -27,18 +27,18 @@ entity_t;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(50000)
-#define RADIUS_ODDS 6000.0f
+#define ITER UINT32_C(300000)
+#define RADIUS_ODDS 1000.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 1024.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 9000.0f
-#define ARENA_HEIGHT 9000.0f
+#define ARENA_WIDTH 100000.0f
+#define ARENA_HEIGHT 100000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
 #define CANT_ESCAPE_AREA 1
-#define DO_THEM_QUERIES 0
+#define DO_THEM_QUERIES 1
 #define QUERIES_NUM 1000
 
 static quadtree_t qt = {0};
@@ -56,6 +56,8 @@ measurement_t;
 static measurement_t measure_normalize;
 static measurement_t measure_collide;
 static measurement_t measure_update;
+static measurement_t measure_reinsertions;
+static measurement_t measure_node_removals;
 static measurement_t measure_rdtsc;
 #if DO_THEM_QUERIES == 1
 static measurement_t measure_query;
@@ -394,6 +396,18 @@ tick(
 		printf("Update: %.02lfms\n", time_elapsed);
 	}
 
+	time_elapsed = measure(&measure_reinsertions, qt.reinsertions_used);
+	if(time_elapsed)
+	{
+		printf("Reinsertions: %u\n", (uint32_t) time_elapsed);
+	}
+
+	time_elapsed = measure(&measure_node_removals, qt.node_removals_used);
+	if(time_elapsed)
+	{
+		printf("Node Removals: %u\n", (uint32_t) time_elapsed);
+	}
+
 	start = get_time();
 	quadtree_normalize(&qt);
 	end = get_time();
@@ -403,6 +417,7 @@ tick(
 		printf("Normalize: %.02lfms\n", time_elapsed);
 		printf("Nodes: %u\n", qt.nodes_used);
 		printf("Node entities: %u\n", qt.node_entities_used);
+		printf("Entities: %u\n", qt.entities_used);
 	}
 
 #if DO_THEM_QUERIES == 1

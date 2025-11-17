@@ -8,9 +8,9 @@ LIBS = -lglfw -lGL -lm
 .PHONY: build
 build:
 	$(CC) test.c -o test $(FLAGS) $(LIBS)
+	./test
 	# valgrind ./test
 	# valgrind --tool=callgrind ./test
-	./test
 
 .PHONY: profile
 profile:

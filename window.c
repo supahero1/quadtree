@@ -244,5 +244,5 @@ draw_free(
 	glDisable(GL_BLEND);
 
 	glfwDestroyWindow(window);
-	glfwTerminate();
+	// glfwTerminate();
 }

@@ -51,6 +51,10 @@ typedef struct quadtree_node_entity
 {
 	uint32_t next;
 	uint32_t entity;
+	bool crossed_top;
+	bool crossed_right;
+	bool crossed_bottom;
+	bool crossed_left;
 }
 quadtree_node_entity_t;
 
@@ -73,6 +77,15 @@ quadtree_node_entity_t;
 #endif
 
 
+typedef enum quadtree_status
+{
+	QUADTREE_STATUS_CHANGED,
+	QUADTREE_STATUS_NOT_CHANGED,
+	MACRO_ENUM_BITS(QUADTREE_STATUS)
+}
+quadtree_status_t;
+
+
 typedef struct quadtree_entity
 {
 	union
@@ -81,9 +94,11 @@ typedef struct quadtree_entity
 		uint32_t next;
 	};
 
+	uint32_t in_nodes_minus_one;
 	uint32_t query_tick;
 	uint8_t update_tick;
-	bool fully_in_node;
+	uint8_t reinsertion_tick;
+	quadtree_status_t status;
 }
 quadtree_entity_t;
 
@@ -136,15 +151,6 @@ typedef struct quadtree_reinsertion
 	uint32_t entity_idx;
 }
 quadtree_reinsertion_t;
-
-
-typedef enum quadtree_status
-{
-	QUADTREE_STATUS_CHANGED,
-	QUADTREE_STATUS_NOT_CHANGED,
-	MACRO_ENUM_BITS(QUADTREE_STATUS)
-}
-quadtree_status_t;
 
 
 typedef struct quadtree quadtree_t;

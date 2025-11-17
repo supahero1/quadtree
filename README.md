@@ -1,6 +1,6 @@
 This is a very efficient C Quadtree that does not use any recursion.
 
-On my laptop at least, it handles 200,000 entities of wildly varying sizes at around 13mspt, with 1,000x 1920x1080 (roughly) queries taking around 0.6mspt. Here's a screenshot of the simulation:
+On my laptop at least, it handles 300,000 entities of wildly varying sizes at around 11-12mspt, with 1,000x 1920x1080 (roughly) queries taking around 3mspt. Here's a screenshot of the simulation:
 
 ![Screenshot of the simulation](simulation.png)
 
