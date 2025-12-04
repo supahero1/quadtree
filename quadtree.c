@@ -18,6 +18,7 @@
 #include "alloc/include/debug.h"
 #include "alloc/include/alloc_ext.h"
 
+#include <math.h>
 #include <string.h>
 
 
@@ -1272,7 +1273,13 @@ quadtree_update(
 			{
 				entity->update_tick = update_tick;
 				entity->reinsertion_tick = update_tick ^ 1;
-				entity->status = update_fn(qt, entity_idx, &entity->data);
+
+				quadtree_entity_info_t entity_info =
+				{
+					.idx = entity_idx,
+					.data = &entity->data
+				};
+				entity->status = update_fn(qt, entity_info);
 			}
 
 			if(entity->status == QUADTREE_STATUS_NOT_CHANGED)
@@ -1462,7 +1469,12 @@ quadtree_query(
 
 				if(rect_extent_intersects(quadtree_get_entity_rect_extent(entity), extent))
 				{
-					query_fn(qt, entity_idx, &entity->data);
+					quadtree_entity_info_t entity_info =
+					{
+						.idx = entity_idx,
+						.data = &entity->data
+					};
+					query_fn(qt, entity_info);
 				}
 			}
 
@@ -1559,6 +1571,11 @@ quadtree_collide(
 		uint32_t entity_idx = node_entity->entity;
 		quadtree_entity_t* entity = entities + entity_idx;
 		rect_extent_t entity_extent = quadtree_get_entity_rect_extent(entity);
+		quadtree_entity_info_t entity_info =
+		{
+			.idx = entity_idx,
+			.data = &entity->data
+		};
 
 		quadtree_node_entity_t* other_node_entity = node_entity;
 		while(1)
@@ -1627,7 +1644,12 @@ quadtree_collide(
 			}
 #endif
 
-			collide_fn(qt, entity_idx, &entity->data, other_entity_idx, &other_entity->data);
+			quadtree_entity_info_t other_entity_info =
+			{
+				.idx = other_entity_idx,
+				.data = &other_entity->data
+			};
+			collide_fn(qt, entity_info, other_entity_info);
 
 			goto_skip:;
 
@@ -1720,6 +1742,104 @@ quadtree_depth(
 quadtree_fill_node_default(__VA_ARGS__)
 
 	return max_depth;
+}
+
+
+private float
+quadtree_point_to_extent_distance_sq(
+	float x,
+	float y,
+	rect_extent_t extent
+	)
+{
+	float dx = MACRO_MAX(MACRO_MAX(extent.min_x - x, 0.0f), x - extent.max_x);
+	float dy = MACRO_MAX(MACRO_MAX(extent.min_y - y, 0.0f), y - extent.max_y);
+	return dx * dx + dy * dy;
+}
+
+
+float
+quadtree_nearest(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float max_distance,
+	quadtree_query_fn_t query_fn
+	)
+{
+	assert_not_null(qt);
+
+	quadtree_normalize(qt);
+
+	if(max_distance < 0.0f)
+	{
+		max_distance = INFINITY;
+	}
+	max_distance *= max_distance;
+
+	quadtree_node_t* nodes = qt->nodes;
+	quadtree_node_entity_t* node_entities = qt->node_entities;
+	quadtree_entity_t* entities = qt->entities;
+
+	quadtree_node_info_t node_infos[qt->dfs_length];
+	quadtree_node_info_t* node_info = node_infos;
+
+	*(node_info++) =
+	(quadtree_node_info_t)
+	{
+		.node_idx = 0,
+		.extent = qt->half_extent
+	};
+
+	do
+	{
+		quadtree_node_info_t info = *(--node_info);
+		quadtree_node_t* node = nodes + info.node_idx;
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			quadtree_descend_all();
+			continue;
+		}
+
+		rect_extent_t node_extent = half_to_rect_extent(info.extent);
+		float distance = quadtree_point_to_extent_distance_sq(x, y, node_extent);
+		if(distance >= max_distance)
+		{
+			continue;
+		}
+
+		uint32_t idx = node->head;
+		while(idx)
+		{
+			quadtree_node_entity_t* node_entity = node_entities + idx;
+			uint32_t entity_idx = node_entity->entity;
+			quadtree_entity_t* entity = entities + entity_idx;
+
+			rect_extent_t extent = quadtree_get_entity_rect_extent(entity);
+			float distance = quadtree_point_to_extent_distance_sq(x, y, extent);
+
+			if(distance < max_distance)
+			{
+				max_distance = distance;
+
+				if(query_fn)
+				{
+					quadtree_entity_info_t entity_info =
+					{
+						.idx = entity_idx,
+						.data = &entity->data
+					};
+					query_fn(qt, entity_info);
+				}
+			}
+
+			idx = node_entity->next;
+		}
+	}
+	while(node_info != node_infos);
+
+	return max_distance;
 }
 
 

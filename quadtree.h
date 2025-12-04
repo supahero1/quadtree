@@ -153,14 +153,21 @@ typedef struct quadtree_reinsertion
 quadtree_reinsertion_t;
 
 
+typedef struct quadtree_entity_info
+{
+	uint32_t idx;
+	quadtree_entity_data* data;
+}
+quadtree_entity_info_t;
+
+
 typedef struct quadtree quadtree_t;
 
 
 typedef void
 (*quadtree_query_fn_t)(
 	quadtree_t* qt,
-	uint32_t entity_idx,
-	quadtree_entity_data* entity
+	quadtree_entity_info_t info
 	);
 
 
@@ -174,18 +181,15 @@ typedef void
 typedef void
 (*quadtree_collide_fn_t)(
 	const quadtree_t* qt,
-	uint32_t entity_a_idx,
-	quadtree_entity_data* entity_a,
-	uint32_t entity_b_idx,
-	quadtree_entity_data* entity_b
+	quadtree_entity_info_t info_a,
+	quadtree_entity_info_t info_b
 	);
 
 
 typedef quadtree_status_t
 (*quadtree_update_fn_t)(
 	quadtree_t* qt,
-	uint32_t entity_idx,
-	quadtree_entity_data* entity
+	quadtree_entity_info_t info
 	);
 
 
@@ -312,4 +316,14 @@ quadtree_collide(
 extern uint32_t
 quadtree_depth(
 	quadtree_t* qt
+	);
+
+
+extern float
+quadtree_nearest(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float max_distance,
+	quadtree_query_fn_t query_fn
 	);

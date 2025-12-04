@@ -27,13 +27,13 @@ entity_t;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(300000)
-#define RADIUS_ODDS 1000.0f
+#define ITER UINT32_C(50000)
+#define RADIUS_ODDS 2000.0f
 #define RADIUS_MIN 16.0f
-#define RADIUS_MAX 1024.0f
+#define RADIUS_MAX 768.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 100000.0f
-#define ARENA_HEIGHT 100000.0f
+#define ARENA_WIDTH 10000.0f
+#define ARENA_HEIGHT 10000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -95,10 +95,11 @@ measure(
 static quadtree_status_t
 update_entity(
 	quadtree_t* qt,
-	uint32_t entity_idx,
-	entity_t* entity
+	quadtree_entity_info_t info
 	)
 {
+	entity_t* entity = info.data;
+
 	entity->extent.min_x += entity->vx;
 	entity->extent.max_x += entity->vx;
 	entity->extent.min_y += entity->vy;
@@ -164,15 +165,14 @@ update_entity(
 static void
 collide_entities(
 	const quadtree_t* qt,
-	uint32_t entity_a_idx,
-	entity_t* entity_a,
-	uint32_t entity_b_idx,
-	entity_t* entity_b
+	quadtree_entity_info_t info_a,
+	quadtree_entity_info_t info_b
 	)
 {
 	(void) qt;
-	(void) entity_a_idx;
-	(void) entity_b_idx;
+
+	entity_t* entity_a = info_a.data;
+	entity_t* entity_b = info_b.data;
 
 	half_extent_t extent_a = rect_to_half_extent(entity_a->extent);
 	half_extent_t extent_b = rect_to_half_extent(entity_b->extent);
@@ -269,10 +269,11 @@ draw_node(
 static void
 draw_entity(
 	quadtree_t* qt,
-	uint32_t entity_idx,
-	entity_t* entity
+	quadtree_entity_info_t info
 	)
 {
+	entity_t* entity = info.data;
+
 	rect_t rect = to_screen(entity->extent);
 
 	for(int x = rect.min_x; x <= rect.max_x; ++x)
@@ -362,13 +363,11 @@ init(
 static void
 query_ignore(
 	quadtree_t* qt,
-	uint32_t entity_idx,
-	entity_t* entity
+	quadtree_entity_info_t info
 	)
 {
 	(void) qt;
-	(void) entity_idx;
-	(void) entity;
+	(void) info;
 }
 
 #endif
