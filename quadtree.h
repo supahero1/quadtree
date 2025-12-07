@@ -47,18 +47,6 @@ typedef union quadtree_node
 quadtree_node_t;
 
 
-typedef struct quadtree_node_entity
-{
-	uint32_t next;
-	uint32_t entity;
-	bool crossed_top;
-	bool crossed_right;
-	bool crossed_bottom;
-	bool crossed_left;
-}
-quadtree_node_entity_t;
-
-
 #ifndef quadtree_entity_data
 
 
@@ -134,7 +122,6 @@ typedef struct quadtree_node_removal
 {
 	uint32_t node_idx;
 	uint32_t node_entity_idx;
-	uint32_t prev_node_entity_idx;
 }
 quadtree_node_removal_t;
 
@@ -193,6 +180,33 @@ typedef quadtree_status_t
 	);
 
 
+typedef struct quadtree_node_entity
+{
+	uint32_t index:31;
+	uint32_t is_last:1;
+}
+quadtree_node_entity_t;
+
+
+typedef struct quadtree_node_entities
+{
+	uint32_t* next;
+	quadtree_node_entity_t* entities;
+	uint8_t* flags;
+}
+quadtree_node_entities_t;
+
+
+typedef enum quadtree_normalized : uint8_t
+{
+	QUADTREE_NORMALIZED				= 0,
+	QUADTREE_NOT_NORMALIZED_SOFT	= 1 << 0,
+	QUADTREE_NOT_NORMALIZED_HARD	= 1 << 1,
+	MACRO_ENUM_BITS_EXP(QUADTREE_NORMALIZED)
+}
+quadtree_normalized_t;
+
+
 struct quadtree
 {
 	uint32_t split_threshold;
@@ -203,7 +217,7 @@ struct quadtree
 	float min_size;
 
 	quadtree_node_t* nodes;
-	quadtree_node_entity_t* node_entities;
+	quadtree_node_entities_t node_entities;
 	quadtree_entity_t* entities;
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	quadtree_ht_entry_t* ht_entries;
@@ -243,7 +257,7 @@ struct quadtree
 	uint32_t query_tick;
 	uint8_t update_tick;
 
-	bool normalized;
+	quadtree_normalized_t normalization;
 	bool merge_threshold_set;
 
 	rect_extent_t rect_extent;

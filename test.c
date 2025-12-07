@@ -27,10 +27,10 @@ entity_t;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(50000)
+#define ITER UINT32_C(60000)
 #define RADIUS_ODDS 2000.0f
 #define RADIUS_MIN 16.0f
-#define RADIUS_MAX 768.0f
+#define RADIUS_MAX 700.0f
 #define MIN_SIZE 16.0f
 #define ARENA_WIDTH 10000.0f
 #define ARENA_HEIGHT 10000.0f
@@ -484,7 +484,7 @@ main()
 
 	uint64_t seed = get_time() * 100000;
 	printf("Seed: %lu\n", seed);
-	srand(5);
+	srand(2);
 
 	qt.rect_extent =
 	(rect_extent_t)
