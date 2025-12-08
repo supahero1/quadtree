@@ -311,7 +311,7 @@ quadtree_update(
 
 
 extern void
-quadtree_query(
+quadtree_query_rect(
 	quadtree_t* qt,
 	rect_extent_t extent,
 	quadtree_query_fn_t query_fn,
@@ -320,9 +320,31 @@ quadtree_query(
 
 
 extern void
-quadtree_query_nodes(
+quadtree_query_circle(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float radius,
+	quadtree_query_fn_t query_fn,
+	void* user_data
+	);
+
+
+extern void
+quadtree_query_nodes_rect(
 	quadtree_t* qt,
 	rect_extent_t extent,
+	quadtree_node_query_fn_t node_query_fn,
+	void* user_data
+	);
+
+
+extern void
+quadtree_query_nodes_circle(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float radius,
 	quadtree_node_query_fn_t node_query_fn,
 	void* user_data
 	);
@@ -343,10 +365,34 @@ quadtree_depth(
 
 
 extern float
-quadtree_nearest(
+quadtree_nearest_circle(
 	quadtree_t* qt,
 	float x,
 	float y,
+	float max_distance,
+	quadtree_query_fn_t query_fn,
+	void* user_data
+	);
+
+
+extern float
+quadtree_nearest_rect(
+	quadtree_t* qt,
+	float x,
+	float y,
+	rect_extent_t extent,
+	quadtree_query_fn_t query_fn,
+	void* user_data
+	);
+
+
+extern void
+quadtree_raycast(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float dx,
+	float dy,
 	float max_distance,
 	quadtree_query_fn_t query_fn,
 	void* user_data

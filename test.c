@@ -27,13 +27,13 @@ entity_t;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(200000)
+#define ITER UINT32_C(400000)
 #define RADIUS_ODDS 2000.0f
 #define RADIUS_MIN 16.0f
-#define RADIUS_MAX 768.0f
+#define RADIUS_MAX 2048.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 50000.0f
-#define ARENA_HEIGHT 50000.0f
+#define ARENA_WIDTH 100000.0f
+#define ARENA_HEIGHT 100000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -366,7 +366,7 @@ init(
 		quadtree_insert(&qt, rands + i);
 	}
 	end = get_time();
-	printf("Insertion: %.02lfms\n", end - start);
+	printf("Queueing insertions took %.02lfms\n", end - start);
 
 	alloc_free(rands, ITER);
 }
@@ -446,7 +446,7 @@ tick(
 			.min_y = qt.entities[i].data.extent.min_y - 1080.0f * 0.5f,
 			.max_y = qt.entities[i].data.extent.max_y + 1080.0f * 0.5f
 		};
-		quadtree_query(&qt, extent, query_ignore, NULL);
+		quadtree_query_rect(&qt, extent, query_ignore, NULL);
 	}
 	end = get_time();
 	time_elapsed = measure(&measure_query, end - start);
@@ -543,8 +543,8 @@ main()
 
 		rect_extent_t rect_view = half_to_rect_extent(view);
 
-		quadtree_query_nodes(&qt, rect_view, draw_node, NULL);
-		quadtree_query(&qt, rect_view, draw_entity, NULL);
+		quadtree_query_nodes_rect(&qt, rect_view, draw_node, NULL);
+		quadtree_query_rect(&qt, rect_view, draw_entity, NULL);
 
 		draw_end();
 

@@ -460,7 +460,6 @@ quadtree_normalize(
 				{
 					if(node_entities.entities[node_entity_idx].index == entity_idx)
 					{
-						quadtree_reset_flags();
 						goto goto_skip;
 					}
 
@@ -498,11 +497,11 @@ quadtree_normalize(
 				node_entities.entities[node_entity_idx].index = entity_idx;
 				node->head = node_entity_idx;
 
-				quadtree_reset_flags();
-
 				++node->count;
 
 				goto_skip:;
+
+				quadtree_reset_flags();
 			}
 			while(node_info != node_infos);
 
@@ -1473,7 +1472,7 @@ quadtree_update(
 
 
 void
-quadtree_query(
+quadtree_query_rect(
 	quadtree_t* qt,
 	rect_extent_t extent,
 	quadtree_query_fn_t query_fn,
@@ -1552,8 +1551,125 @@ quadtree_query(
 }
 
 
+private float
+quadtree_point_to_extent_distance_sq(
+	float x,
+	float y,
+	rect_extent_t extent
+	)
+{
+	float dx = MACRO_MAX(MACRO_MAX(extent.min_x - x, 0.0f), x - extent.max_x);
+	float dy = MACRO_MAX(MACRO_MAX(extent.min_y - y, 0.0f), y - extent.max_y);
+	return dx * dx + dy * dy;
+}
+
+
 void
-quadtree_query_nodes(
+quadtree_query_circle(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float radius,
+	quadtree_query_fn_t query_fn,
+	void* user_data
+	)
+{
+	assert_not_null(qt);
+	assert_not_null(query_fn);
+
+	quadtree_normalize_hard(qt);
+
+	++qt->query_tick;
+	uint32_t query_tick = qt->query_tick;
+
+	float radius_sq = radius * radius;
+
+	rect_extent_t search_extent =
+	{
+		.min_x = x - radius,
+		.min_y = y - radius,
+		.max_x = x + radius,
+		.max_y = y + radius
+	};
+
+	quadtree_node_t* nodes = qt->nodes;
+	quadtree_node_entity_t* node_entities = qt->node_entities.entities;
+	quadtree_entity_t* entities = qt->entities;
+
+	quadtree_node_info_t node_infos[qt->dfs_length];
+	quadtree_node_info_t* node_info = node_infos;
+
+	*(node_info++) =
+	(quadtree_node_info_t)
+	{
+		.node_idx = 0,
+		.extent = qt->half_extent
+	};
+
+	do
+	{
+		quadtree_node_info_t info = *(--node_info);
+		quadtree_node_t* node = nodes + info.node_idx;
+
+		rect_extent_t node_extent = half_to_rect_extent(info.extent);
+
+		if(quadtree_point_to_extent_distance_sq(x, y, node_extent) > radius_sq)
+		{
+			continue;
+		}
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			quadtree_descend(search_extent);
+			continue;
+		}
+
+		uint32_t idx = node->head;
+		if(!idx)
+		{
+			continue;
+		}
+
+		quadtree_node_entity_t* node_entity = node_entities + idx;
+
+		while(1)
+		{
+			uint32_t entity_idx = node_entity->index;
+			quadtree_entity_t* entity = entities + entity_idx;
+
+			if(entity->query_tick != query_tick)
+			{
+				entity->query_tick = query_tick;
+
+				rect_extent_t entity_extent = quadtree_get_entity_rect_extent(entity);
+
+				float edx = MACRO_MAX(MACRO_MAX(entity_extent.min_x - x, 0.0f), x - entity_extent.max_x);
+				float edy = MACRO_MAX(MACRO_MAX(entity_extent.min_y - y, 0.0f), y - entity_extent.max_y);
+
+				if(edx * edx + edy * edy <= radius_sq)
+				{
+					quadtree_entity_info_t entity_info =
+					{
+						.idx = entity_idx,
+						.data = &entity->data
+					};
+					query_fn(qt, entity_info, user_data);
+				}
+			}
+
+			if(node_entity->is_last)
+			{
+				break;
+			}
+			++node_entity;
+		}
+	}
+	while(node_info != node_infos);
+}
+
+
+void
+quadtree_query_nodes_rect(
 	quadtree_t* qt,
 	rect_extent_t extent,
 	quadtree_node_query_fn_t node_query_fn,
@@ -1585,6 +1701,67 @@ quadtree_query_nodes(
 		if(node->type != QUADTREE_NODE_TYPE_LEAF)
 		{
 			quadtree_descend(extent);
+			continue;
+		}
+
+		node_query_fn(qt, &info, user_data);
+	}
+	while(node_info != node_infos);
+}
+
+
+void
+quadtree_query_nodes_circle(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float radius,
+	quadtree_node_query_fn_t node_query_fn,
+	void* user_data
+	)
+{
+	assert_not_null(qt);
+	assert_not_null(node_query_fn);
+
+	quadtree_normalize_hard(qt);
+
+	float radius_sq = radius * radius;
+
+	rect_extent_t search_extent =
+	{
+		.min_x = x - radius,
+		.min_y = y - radius,
+		.max_x = x + radius,
+		.max_y = y + radius
+	};
+
+	quadtree_node_t* nodes = qt->nodes;
+
+	quadtree_node_info_t node_infos[qt->dfs_length];
+	quadtree_node_info_t* node_info = node_infos;
+
+	*(node_info++) =
+	(quadtree_node_info_t)
+	{
+		.node_idx = 0,
+		.extent = qt->half_extent
+	};
+
+	do
+	{
+		quadtree_node_info_t info = *(--node_info);
+		quadtree_node_t* node = nodes + info.node_idx;
+
+		rect_extent_t node_extent = half_to_rect_extent(info.extent);
+
+		if(quadtree_point_to_extent_distance_sq(x, y, node_extent) > radius_sq)
+		{
+			continue;
+		}
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			quadtree_descend(search_extent);
 			continue;
 		}
 
@@ -1810,25 +1987,12 @@ quadtree_fill_node_default(__VA_ARGS__)
 }
 
 
-private float
-quadtree_point_to_extent_distance_sq(
-	float x,
-	float y,
-	rect_extent_t extent
-	)
-{
-	float dx = MACRO_MAX(MACRO_MAX(extent.min_x - x, 0.0f), x - extent.max_x);
-	float dy = MACRO_MAX(MACRO_MAX(extent.min_y - y, 0.0f), y - extent.max_y);
-	return dx * dx + dy * dy;
-}
-
-
 float
-quadtree_nearest(
+quadtree_nearest_rect(
 	quadtree_t* qt,
 	float x,
 	float y,
-	float max_distance,
+	rect_extent_t extent,
 	quadtree_query_fn_t query_fn,
 	void* user_data
 	)
@@ -1837,11 +2001,9 @@ quadtree_nearest(
 
 	quadtree_normalize_hard(qt);
 
-	if(max_distance < 0.0f)
-	{
-		max_distance = INFINITY;
-	}
-	max_distance *= max_distance;
+	float max_dist_sq = INFINITY;
+
+	rect_extent_t traversal_extent = extent;
 
 	quadtree_node_t* nodes = qt->nodes;
 	quadtree_node_entity_t* node_entities = qt->node_entities.entities;
@@ -1862,16 +2024,141 @@ quadtree_nearest(
 		quadtree_node_info_t info = *(--node_info);
 		quadtree_node_t* node = nodes + info.node_idx;
 
-		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		rect_extent_t node_extent = half_to_rect_extent(info.extent);
+
+		if(!rect_extent_intersects(node_extent, traversal_extent))
 		{
-			quadtree_descend_all();
 			continue;
 		}
 
-		rect_extent_t node_extent = half_to_rect_extent(info.extent);
-		float distance = quadtree_point_to_extent_distance_sq(x, y, node_extent);
-		if(distance >= max_distance)
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
 		{
+			float distance = quadtree_point_to_extent_distance_sq(x, y, node_extent);
+			if(distance < max_dist_sq)
+			{
+				quadtree_descend(traversal_extent);
+			}
+			continue;
+		}
+
+		float distance = quadtree_point_to_extent_distance_sq(x, y, node_extent);
+		if(distance >= max_dist_sq)
+		{
+			continue;
+		}
+
+		uint32_t idx = node->head;
+		if(!idx)
+		{
+			continue;
+		}
+
+		quadtree_node_entity_t* node_entity = node_entities + idx;
+
+		while(1)
+		{
+			uint32_t entity_idx = node_entity->index;
+			quadtree_entity_t* entity = entities + entity_idx;
+			rect_extent_t entity_extent = quadtree_get_entity_rect_extent(entity);
+
+			if(rect_extent_intersects(entity_extent, extent))
+			{
+				float distance = quadtree_point_to_extent_distance_sq(x, y, entity_extent);
+
+				if(distance < max_dist_sq)
+				{
+					max_dist_sq = distance;
+					float max_dist = sqrtf(max_dist_sq);
+
+					if(query_fn)
+					{
+						quadtree_entity_info_t entity_info =
+						{
+							.idx = entity_idx,
+							.data = &entity->data
+						};
+						query_fn(qt, entity_info, user_data);
+					}
+
+					traversal_extent.min_x = MACRO_MAX(extent.min_x, x - max_dist);
+					traversal_extent.min_y = MACRO_MAX(extent.min_y, y - max_dist);
+					traversal_extent.max_x = MACRO_MIN(extent.max_x, x + max_dist);
+					traversal_extent.max_y = MACRO_MIN(extent.max_y, y + max_dist);
+				}
+			}
+
+			if(node_entity->is_last)
+			{
+				break;
+			}
+			++node_entity;
+		}
+	}
+	while(node_info != node_infos);
+
+	return sqrtf(max_dist_sq);
+}
+
+
+float
+quadtree_nearest_circle(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float max_distance,
+	quadtree_query_fn_t query_fn,
+	void* user_data
+	)
+{
+	assert_not_null(qt);
+
+	quadtree_normalize_hard(qt);
+
+	if(max_distance < 0.0f)
+	{
+		max_distance = INFINITY;
+	}
+
+	float max_dist_sq = max_distance * max_distance;
+	float max_dist = max_distance;
+
+	rect_extent_t search_extent =
+	{
+		.min_x = x - max_distance,
+		.min_y = y - max_distance,
+		.max_x = x + max_distance,
+		.max_y = y + max_distance
+	};
+
+	quadtree_node_t* nodes = qt->nodes;
+	quadtree_node_entity_t* node_entities = qt->node_entities.entities;
+	quadtree_entity_t* entities = qt->entities;
+
+	quadtree_node_info_t node_infos[qt->dfs_length];
+	quadtree_node_info_t* node_info = node_infos;
+
+	*(node_info++) =
+	(quadtree_node_info_t)
+	{
+		.node_idx = 0,
+		.extent = qt->half_extent
+	};
+
+	do
+	{
+		quadtree_node_info_t info = *(--node_info);
+		quadtree_node_t* node = nodes + info.node_idx;
+
+		rect_extent_t node_extent = half_to_rect_extent(info.extent);
+
+		if(quadtree_point_to_extent_distance_sq(x, y, node_extent) >= max_dist_sq)
+		{
+			continue;
+		}
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			quadtree_descend(search_extent);
 			continue;
 		}
 
@@ -1891,9 +2178,15 @@ quadtree_nearest(
 			rect_extent_t extent = quadtree_get_entity_rect_extent(entity);
 			float distance = quadtree_point_to_extent_distance_sq(x, y, extent);
 
-			if(distance < max_distance)
+			if(distance < max_dist_sq)
 			{
-				max_distance = distance;
+				max_dist_sq = distance;
+				max_dist = sqrtf(max_dist_sq);
+
+				search_extent.min_x = x - max_dist;
+				search_extent.min_y = y - max_dist;
+				search_extent.max_x = x + max_dist;
+				search_extent.max_y = y + max_dist;
 
 				if(query_fn)
 				{
@@ -1915,7 +2208,198 @@ quadtree_nearest(
 	}
 	while(node_info != node_infos);
 
-	return max_distance;
+	return max_dist;
+}
+
+
+private bool
+quadtree_ray_intersects_extent(
+	float x,
+	float y,
+	float inv_dx,
+	float inv_dy,
+	float max_distance,
+	rect_extent_t extent
+	)
+{
+	float t1 = (extent.min_x - x) * inv_dx;
+	float t2 = (extent.max_x - x) * inv_dx;
+
+	float t_min = MACRO_MIN(t1, t2);
+	float t_max = MACRO_MAX(t1, t2);
+
+	t1 = (extent.min_y - y) * inv_dy;
+	t2 = (extent.max_y - y) * inv_dy;
+
+	t_min = MACRO_MAX(t_min, MACRO_MIN(t1, t2));
+	t_max = MACRO_MIN(MACRO_MIN(t_max, MACRO_MAX(t1, t2)), max_distance);
+
+	return t_max >= t_min && t_max >= 0.0f;
+}
+
+
+void
+quadtree_raycast(
+	quadtree_t* qt,
+	float x,
+	float y,
+	float dx,
+	float dy,
+	float max_distance,
+	quadtree_query_fn_t query_fn,
+	void* user_data
+	)
+{
+	assert_not_null(qt);
+
+	quadtree_normalize_hard(qt);
+
+	++qt->query_tick;
+	uint32_t query_tick = qt->query_tick;
+
+	quadtree_node_t* nodes = qt->nodes;
+	quadtree_node_entity_t* node_entities = qt->node_entities.entities;
+	quadtree_entity_t* entities = qt->entities;
+
+	float inv_dx = 1.0f / dx;
+	float inv_dy = 1.0f / dy;
+
+	quadtree_node_info_t node_infos[qt->dfs_length];
+	quadtree_node_info_t* node_info = node_infos;
+
+	*(node_info++) =
+	(quadtree_node_info_t)
+	{
+		.node_idx = 0,
+		.extent = qt->half_extent
+	};
+
+	do
+	{
+		quadtree_node_info_t info = *(--node_info);
+		quadtree_node_t* node = nodes + info.node_idx;
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			float half_w = info.extent.w * 0.5f;
+			float half_h = info.extent.h * 0.5f;
+
+			rect_extent_t child_extent;
+			child_extent.min_x = info.extent.x - info.extent.w;
+			child_extent.min_y = info.extent.y - info.extent.h;
+			child_extent.max_x = info.extent.x;
+			child_extent.max_y = info.extent.y;
+
+			if(quadtree_ray_intersects_extent(x, y, inv_dx, inv_dy, max_distance, child_extent))
+			{
+				*(node_info++) = quadtree_fill_node(
+					node->heads[0],
+					((half_extent_t)
+					{
+						.x = info.extent.x - half_w,
+						.y = info.extent.y - half_h,
+						.w = half_w,
+						.h = half_h
+					})
+					);
+			}
+
+			child_extent.min_y = info.extent.y;
+			child_extent.max_y = info.extent.y + info.extent.h;
+
+			if(quadtree_ray_intersects_extent(x, y, inv_dx, inv_dy, max_distance, child_extent))
+			{
+				*(node_info++) = quadtree_fill_node(
+					node->heads[1],
+					((half_extent_t)
+					{
+						.x = info.extent.x - half_w,
+						.y = info.extent.y + half_h,
+						.w = half_w,
+						.h = half_h
+					})
+					);
+			}
+
+			child_extent.min_x = info.extent.x;
+			child_extent.max_x = info.extent.x + info.extent.w;
+			child_extent.min_y = info.extent.y - info.extent.h;
+			child_extent.max_y = info.extent.y;
+
+			if(quadtree_ray_intersects_extent(x, y, inv_dx, inv_dy, max_distance, child_extent))
+			{
+				*(node_info++) = quadtree_fill_node(
+					node->heads[2],
+					((half_extent_t)
+					{
+						.x = info.extent.x + half_w,
+						.y = info.extent.y - half_h,
+						.w = half_w,
+						.h = half_h
+					})
+					);
+			}
+
+			child_extent.min_y = info.extent.y;
+			child_extent.max_y = info.extent.y + info.extent.h;
+
+			if(quadtree_ray_intersects_extent(x, y, inv_dx, inv_dy, max_distance, child_extent))
+			{
+				*(node_info++) = quadtree_fill_node(
+					node->heads[3],
+					((half_extent_t)
+					{
+						.x = info.extent.x + half_w,
+						.y = info.extent.y + half_h,
+						.w = half_w,
+						.h = half_h
+					})
+					);
+			}
+
+			continue;
+		}
+
+		uint32_t idx = node->head;
+		if(!idx)
+		{
+			continue;
+		}
+
+		quadtree_node_entity_t* node_entity = node_entities + idx;
+
+		while(1)
+		{
+			uint32_t entity_idx = node_entity->index;
+			quadtree_entity_t* entity = entities + entity_idx;
+
+			if(entity->query_tick != query_tick)
+			{
+				entity->query_tick = query_tick;
+
+				rect_extent_t entity_extent = quadtree_get_entity_rect_extent(entity);
+				if(quadtree_ray_intersects_extent(x, y, inv_dx, inv_dy, max_distance, entity_extent))
+				{
+					if(query_fn)
+					{
+						quadtree_entity_info_t entity_info =
+						{
+							.idx = entity_idx,
+							.data = &entity->data
+						};
+						query_fn(qt, entity_info, user_data);
+					}
+				}
+			}
+
+			if(node_entity->is_last)
+			{
+				break;
+			}
+			++node_entity;
+		}
+	}
+	while(node_info != node_infos);
 }
 
 
@@ -1949,7 +2433,7 @@ quadtree_check_in_nodes_count(
 		rect_extent_t extent = quadtree_get_entity_rect_extent(entity);
 
 		uint32_t check_count = 0;
-		quadtree_query_nodes(qt, extent, quadtree_check_count_node, &check_count);
+		quadtree_query_nodes_rect(qt, extent, quadtree_check_count_node, &check_count);
 
 		hard_assert_eq(check_count - 1, entity->in_nodes_minus_one);
 	}
