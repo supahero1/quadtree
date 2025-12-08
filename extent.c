@@ -66,12 +66,15 @@ rect_to_half_extent(
 	rect_extent_t extent
 	)
 {
+	float half_w = (extent.max_x - extent.min_x) * 0.5f;
+	float half_h = (extent.max_y - extent.min_y) * 0.5f;
+
 	return
 	(half_extent_t)
 	{
-		.x = (extent.max_x + extent.min_x) * 0.5f,
-		.y = (extent.max_y + extent.min_y) * 0.5f,
-		.w = (extent.max_x - extent.min_x) * 0.5f,
-		.h = (extent.max_y - extent.min_y) * 0.5f
+		.x = extent.min_x + half_w,
+		.y = extent.min_y + half_h,
+		.w = half_w,
+		.h = half_h
 	};
 }

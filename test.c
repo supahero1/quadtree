@@ -27,13 +27,13 @@ entity_t;
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define ITER UINT32_C(60000)
+#define ITER UINT32_C(200000)
 #define RADIUS_ODDS 2000.0f
 #define RADIUS_MIN 16.0f
-#define RADIUS_MAX 700.0f
+#define RADIUS_MAX 768.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 10000.0f
-#define ARENA_HEIGHT 10000.0f
+#define ARENA_WIDTH 50000.0f
+#define ARENA_HEIGHT 50000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.9f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -95,9 +95,12 @@ measure(
 static quadtree_status_t
 update_entity(
 	quadtree_t* qt,
-	quadtree_entity_info_t info
+	quadtree_entity_info_t info,
+	void* user_data
 	)
 {
+	(void) user_data;
+
 	entity_t* entity = info.data;
 
 	entity->extent.min_x += entity->vx;
@@ -166,10 +169,12 @@ static void
 collide_entities(
 	const quadtree_t* qt,
 	quadtree_entity_info_t info_a,
-	quadtree_entity_info_t info_b
+	quadtree_entity_info_t info_b,
+	void* user_data
 	)
 {
 	(void) qt;
+	(void) user_data;
 
 	entity_t* entity_a = info_a.data;
 	entity_t* entity_b = info_b.data;
@@ -242,9 +247,13 @@ collide_entities(
 static void
 draw_node(
 	quadtree_t* qt,
-	const quadtree_node_info_t* info
+	const quadtree_node_info_t* info,
+	void* user_data
 	)
 {
+	(void) qt;
+	(void) user_data;
+
 	rect_t rect = to_screen(half_to_rect_extent(info->extent));
 
 	for(int x = rect.min_x; x <= rect.max_x; ++x)
@@ -269,9 +278,13 @@ draw_node(
 static void
 draw_entity(
 	quadtree_t* qt,
-	quadtree_entity_info_t info
+	quadtree_entity_info_t info,
+	void* user_data
 	)
 {
+	(void) qt;
+	(void) user_data;
+
 	entity_t* entity = info.data;
 
 	rect_t rect = to_screen(entity->extent);
@@ -363,11 +376,13 @@ init(
 static void
 query_ignore(
 	quadtree_t* qt,
-	quadtree_entity_info_t info
+	quadtree_entity_info_t info,
+	void* user_data
 	)
 {
 	(void) qt;
 	(void) info;
+	(void) user_data;
 }
 
 #endif
@@ -378,7 +393,7 @@ tick(
 	)
 {
 	start = get_time();
-	quadtree_collide(&qt, collide_entities);
+	quadtree_collide(&qt, collide_entities, NULL);
 	end = get_time();
 	time_elapsed = measure(&measure_collide, end - start);
 	if(time_elapsed)
@@ -387,7 +402,7 @@ tick(
 	}
 
 	start = get_time();
-	quadtree_update(&qt, update_entity);
+	quadtree_update(&qt, update_entity, NULL);
 	end = get_time();
 	time_elapsed = measure(&measure_update, end - start);
 	if(time_elapsed)
@@ -431,7 +446,7 @@ tick(
 			.min_y = qt.entities[i].data.extent.min_y - 1080.0f * 0.5f,
 			.max_y = qt.entities[i].data.extent.max_y + 1080.0f * 0.5f
 		};
-		quadtree_query(&qt, extent, query_ignore);
+		quadtree_query(&qt, extent, query_ignore, NULL);
 	}
 	end = get_time();
 	time_elapsed = measure(&measure_query, end - start);
@@ -484,7 +499,7 @@ main()
 
 	uint64_t seed = get_time() * 100000;
 	printf("Seed: %lu\n", seed);
-	srand(2);
+	srand(36207250);
 
 	qt.rect_extent =
 	(rect_extent_t)
@@ -528,8 +543,8 @@ main()
 
 		rect_extent_t rect_view = half_to_rect_extent(view);
 
-		quadtree_query_nodes(&qt, rect_view, draw_node);
-		quadtree_query(&qt, rect_view, draw_entity);
+		quadtree_query_nodes(&qt, rect_view, draw_node, NULL);
+		quadtree_query(&qt, rect_view, draw_entity, NULL);
 
 		draw_end();
 
