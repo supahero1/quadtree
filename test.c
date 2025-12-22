@@ -1,4 +1,4 @@
-#include "extent.h"
+#include "extent.c"
 
 typedef struct entity_t
 {
@@ -10,22 +10,12 @@ entity_t;
 #define quadtree_entity_data entity_t
 #define quadtree_get_entity_data_rect_extent(entity) (entity).extent
 
-#include "quadtree.h"
-#include "alloc/include/alloc_ext.h"
-
-#include "extent.c"
 #include "window.c"
 #include "alloc/src/sync.c"
 #include "alloc/src/debug.c"
 #include "alloc/src/alloc.c"
+#include "heap.c"
 #include "quadtree.c"
-
-#include <stdio.h>
-#include <sched.h>
-#include <assert.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <tgmath.h>
 
 #define ITER UINT32_C(400000)
 #define RADIUS_ODDS 2000.0f
@@ -58,7 +48,6 @@ static measurement_t measure_collide;
 static measurement_t measure_update;
 static measurement_t measure_reinsertions;
 static measurement_t measure_node_removals;
-static measurement_t measure_rdtsc;
 #if DO_THEM_QUERIES == 1
 static measurement_t measure_query;
 #endif
@@ -244,7 +233,7 @@ collide_entities(
 	}
 }
 
-static void
+static quadtree_status_t
 draw_node(
 	quadtree_t* qt,
 	const quadtree_node_info_t* info,
@@ -273,9 +262,11 @@ draw_node(
 			paint_pixel(rect.max_x, y, 0x40000000);
 		}
 	}
+
+	return QUADTREE_STATUS_NOT_CHANGED;
 }
 
-static void
+static quadtree_status_t
 draw_entity(
 	quadtree_t* qt,
 	quadtree_entity_info_t info,
@@ -300,6 +291,8 @@ draw_entity(
 		paint_pixel(rect.min_x, y, 0xFF000000);
 		paint_pixel(rect.max_x, y, 0xFF000000);
 	}
+
+	return QUADTREE_STATUS_NOT_CHANGED;
 }
 
 float
@@ -373,7 +366,7 @@ init(
 
 #if DO_THEM_QUERIES == 1
 
-static void
+static quadtree_status_t
 query_ignore(
 	quadtree_t* qt,
 	quadtree_entity_info_t info,
@@ -383,6 +376,8 @@ query_ignore(
 	(void) qt;
 	(void) info;
 	(void) user_data;
+
+	return QUADTREE_STATUS_NOT_CHANGED;
 }
 
 #endif
@@ -457,45 +452,10 @@ tick(
 #endif
 }
 
-static inline uint64_t
-rdtsc_start()
-{
-	uint32_t hi, lo;
-	__asm__ volatile("CPUID\n\t"
-					 "RDTSC\n\t"
-					 "mov %%edx, %0\n\t"
-					 "mov %%eax, %1\n\t"
-					 : "=r" (hi), "=r" (lo)
-					 :: "%rax", "%rbx", "%rcx", "%rdx");
-	return ((uint64_t) hi << 32) | lo;
-}
-
-static inline uint64_t
-rdtsc_end()
-{
-	uint32_t hi, lo;
-	__asm__ volatile("RDTSCP\n\t"
-					 "mov %%edx, %0\n\t"
-					 "mov %%eax, %1\n\t"
-					 "CPUID\n\t"
-					 : "=r" (hi), "=r" (lo)
-					 :: "%rax", "%rbx", "%rcx", "%rdx");
-	return ((uint64_t) hi << 32) | lo;
-}
-
 int
 main()
 {
 	draw_init();
-
-	struct sched_param param;
-	param.sched_priority = 99;
-	sched_setscheduler(0, SCHED_FIFO, &param);
-
-	cpu_set_t set;
-	CPU_ZERO(&set);
-	CPU_SET(0, &set);
-	sched_setaffinity(0, sizeof(set), &set);
 
 	uint64_t seed = get_time() * 100000;
 	printf("Seed: %lu\n", seed);
@@ -532,14 +492,7 @@ main()
 			break;
 		}
 
-		uint64_t start_tsc = rdtsc_start();
 		tick();
-		uint64_t end_tsc = rdtsc_end();
-		time_elapsed = measure(&measure_rdtsc, end_tsc - start_tsc);
-		if(time_elapsed)
-		{
-			printf("RDTSC: %.02lf\n", time_elapsed);
-		}
 
 		rect_extent_t rect_view = half_to_rect_extent(view);
 
@@ -547,8 +500,6 @@ main()
 		quadtree_query_rect(&qt, rect_view, draw_entity, NULL);
 
 		draw_end();
-
-		sched_yield();
 	}
 
 	draw_free();

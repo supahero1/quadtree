@@ -65,7 +65,7 @@ quadtree_node_t;
 #endif
 
 
-typedef enum quadtree_status
+typedef enum quadtree_status : uint8_t
 {
 	QUADTREE_STATUS_CHANGED,
 	QUADTREE_STATUS_NOT_CHANGED,
@@ -152,7 +152,7 @@ quadtree_entity_info_t;
 typedef struct quadtree quadtree_t;
 
 
-typedef void
+typedef quadtree_status_t
 (*quadtree_query_fn_t)(
 	quadtree_t* qt,
 	quadtree_entity_info_t info,
@@ -160,7 +160,7 @@ typedef void
 	);
 
 
-typedef void
+typedef quadtree_status_t
 (*quadtree_node_query_fn_t)(
 	quadtree_t* qt,
 	const quadtree_node_info_t* info,
@@ -364,23 +364,23 @@ quadtree_depth(
 	);
 
 
-extern float
-quadtree_nearest_circle(
+extern void
+quadtree_nearest_rect(
 	quadtree_t* qt,
-	float x,
-	float y,
-	float max_distance,
+	rect_extent_t extent,
+	uint32_t max_results,
 	quadtree_query_fn_t query_fn,
 	void* user_data
 	);
 
 
-extern float
-quadtree_nearest_rect(
+extern void
+quadtree_nearest_circle(
 	quadtree_t* qt,
 	float x,
 	float y,
-	rect_extent_t extent,
+	float max_distance,
+	uint32_t max_results,
 	quadtree_query_fn_t query_fn,
 	void* user_data
 	);
@@ -393,7 +393,6 @@ quadtree_raycast(
 	float y,
 	float dx,
 	float dy,
-	float max_distance,
 	quadtree_query_fn_t query_fn,
 	void* user_data
 	);

@@ -20,3 +20,8 @@ profile:
 	./test
 	$(CC) test.c -o test $(FLAGS) -fprofile-use $(LIBS)
 	./test
+
+.PHONY: testo
+testo:
+	$(CC) testo.c -o testo $(FLAGS) $(LIBS)
+	./testo
