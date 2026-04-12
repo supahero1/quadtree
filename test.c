@@ -173,8 +173,8 @@ collide_entities(
 
 	float diff_x = extent_a.x - extent_b.x;
 	float diff_y = extent_a.y - extent_b.y;
-	float overlap_x = (extent_a.w + extent_b.w) - fabs(diff_x);
-	float overlap_y = (extent_a.h + extent_b.h) - fabs(diff_y);
+	float overlap_x = (extent_a.w + extent_b.w) - fabsf(diff_x);
+	float overlap_y = (extent_a.h + extent_b.h) - fabsf(diff_y);
 
 	if(overlap_x > 0 && overlap_y > 0)
 	{

@@ -1344,62 +1344,17 @@ quadtree_update(
 
 			rect_extent_t extent = quadtree_get_entity_rect_extent(entity);
 
-			bool crossed_new_boundary = false;
-			uint8_t flags = *node_entities_flags;
+			uint8_t old_flags = *node_entities_flags;
+			uint8_t pos_flags = node->position_flags;
 
-			if(extent.max_y >= node_extent.max_y && !(node->position_flags & 0b1000))
-			{
-				if(!(flags & 0b1000))
-				{
-					flags |= 0b1000;
-					crossed_new_boundary = true;
-				}
-			}
-			else if(flags & 0b1000)
-			{
-				flags &= ~0b1000;
-			}
+			uint8_t new_flags =
+				((-(uint8_t)(extent.max_y >= node_extent.max_y)) & 0b1000 & ~pos_flags) |
+				((-(uint8_t)(extent.max_x >= node_extent.max_x)) & 0b0100 & ~pos_flags) |
+				((-(uint8_t)(extent.min_y <= node_extent.min_y)) & 0b0010 & ~pos_flags) |
+				((-(uint8_t)(extent.min_x <= node_extent.min_x)) & 0b0001 & ~pos_flags);
 
-			if(extent.max_x >= node_extent.max_x && !(node->position_flags & 0b0100))
-			{
-				if(!(flags & 0b0100))
-				{
-					flags |= 0b0100;
-					crossed_new_boundary = true;
-				}
-			}
-			else if(flags & 0b0100)
-			{
-				flags &= ~0b0100;
-			}
-
-			if(extent.min_y <= node_extent.min_y && !(node->position_flags & 0b0010))
-			{
-				if(!(flags & 0b0010))
-				{
-					flags |= 0b0010;
-					crossed_new_boundary = true;
-				}
-			}
-			else if(flags & 0b0010)
-			{
-				flags &= ~0b0010;
-			}
-
-			if(extent.min_x <= node_extent.min_x && !(node->position_flags & 0b0001))
-			{
-				if(!(flags & 0b0001))
-				{
-					flags |= 0b0001;
-					crossed_new_boundary = true;
-				}
-			}
-			else if(flags & 0b0001)
-			{
-				flags &= ~0b0001;
-			}
-
-			*node_entities_flags = flags;
+			*node_entities_flags = new_flags;
+			bool crossed_new_boundary = new_flags & ~old_flags;
 
 			if(crossed_new_boundary && entity->reinsertion_tick != update_tick)
 			{
