@@ -1,7 +1,7 @@
 #include <GLFW/glfw3.h>
 
 #include "window.h"
-#include "alloc/include/alloc_ext.h"
+#include "alloc/include/alloc/base.h"
 
 #include <assert.h>
 #include <string.h>

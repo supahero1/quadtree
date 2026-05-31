@@ -16,8 +16,8 @@
 
 #include "heap.h"
 #include "quadtree.h"
-#include "alloc/include/debug.h"
-#include "alloc/include/alloc_ext.h"
+#include "alloc/include/alloc/base.h"
+#include "alloc/include/alloc/debug.h"
 
 #include <math.h>
 #include <string.h>
@@ -1241,7 +1241,7 @@ quadtree_normalize(
 }
 
 
-private void
+void
 quadtree_normalize_hard(
 	quadtree_t* qt
 	)
@@ -1512,7 +1512,7 @@ quadtree_query_rect(
 }
 
 
-private float
+float
 quadtree_point_to_extent_distance_sq(
 	float x,
 	float y,
@@ -1969,7 +1969,7 @@ typedef struct quadtree_search_item
 }
 quadtree_search_item_t;
 
-private int
+int
 quadtree_search_cmp(
 	const void* a,
 	const void* b
@@ -2491,7 +2491,7 @@ quadtree_raycast(
 }
 
 
-private quadtree_status_t
+quadtree_status_t
 quadtree_check_count_node(
 	quadtree_t* qt,
 	const quadtree_node_info_t* info,
@@ -2508,7 +2508,7 @@ quadtree_check_count_node(
 }
 
 
-private void
+void
 quadtree_check_in_nodes_count(
 	quadtree_t* qt
 	)

@@ -15,8 +15,8 @@
  */
 
 #include "heap.h"
-#include "alloc/include/debug.h"
-#include "alloc/include/alloc_ext.h"
+#include "alloc/include/alloc/base.h"
+#include "alloc/include/alloc/debug.h"
 
 #include <string.h>
 
@@ -53,7 +53,7 @@ heap_free(
 }
 
 
-private void
+void
 heap_resize(
 	heap_t* heap,
 	uint32_t count
@@ -111,7 +111,7 @@ heap_push(
 }
 
 
-private void
+void
 heap_down_common(
 	heap_t* heap,
 	void* el

@@ -11,9 +11,21 @@ entity_t;
 #define quadtree_get_entity_data_rect_extent(entity) (entity).extent
 
 #include "window.c"
-#include "alloc/src/sync.c"
+#include "alloc/src/arena.c"
+#include "alloc/src/base.c"
+#include "alloc/src/bootstrap.c"
+#include "alloc/src/btree.c"
+#include "alloc/src/consts.c"
 #include "alloc/src/debug.c"
-#include "alloc/src/alloc.c"
+#include "alloc/src/huge.c"
+#include "alloc/src/log.c"
+#include "alloc/src/magic.c"
+#include "alloc/src/platform.c"
+#include "alloc/src/red_zone.c"
+#include "alloc/src/report.c"
+#include "alloc/src/sync.c"
+#include "alloc/src/tcb.c"
+#include "alloc/src/threads.c"
 #include "heap.c"
 #include "quadtree.c"
 
