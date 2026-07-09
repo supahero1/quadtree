@@ -2081,8 +2081,8 @@ quadtree_nearest_rect(
 			{
 				half_extent_t child_ext =
 				{
-					.x = current.extent.x + (i & 2) ? half_w : -half_w,
-					.y = current.extent.y + (i & 1) ? half_h : -half_h,
+					.x = current.extent.x + ((i & 2) ? half_w : -half_w),
+					.y = current.extent.y + ((i & 1) ? half_h : -half_h),
 					.w = half_w,
 					.h = half_h
 				};

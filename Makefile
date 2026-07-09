@@ -1,5 +1,5 @@
 CORE_F := -D_GNU_SOURCE -DALLOC_DEBUG -Wall -Wno-unused-function -Wno-address-of-packed-member -Ialloc/include
-FLAGS  := -fvisibility=hidden -Ofast -march=native -DNDEBUG $(CORE_F)
+FLAGS  := -fvisibility=hidden -flto -Ofast -march=native -DNDEBUG $(CORE_F)
 # FLAGS  := -O0 -g3 -ggdb -rdynamic $(CORE_F)
 # FLAGS  := -O3 -g3 -DNDEBUG $(CORE_F)
 
