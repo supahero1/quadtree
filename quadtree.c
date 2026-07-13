@@ -1767,7 +1767,7 @@ quadtree_collide(
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	uint32_t ht_size = MACRO_NEXT_OR_EQUAL_POWER_OF_2(MACRO_MAX(qt->ht_entries_used * 2, 1));
 	uint32_t ht_mask = ht_size - 1;
-	assert_true(MACRO_IS_POWER_OF_2(ht_mask));
+	assert_true(MACRO_IS_POWER_OF_2(ht_size));
 
 	uint32_t* ht = alloc_calloc(ht, ht_size);
 	assert_ptr(ht, ht_size);
