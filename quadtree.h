@@ -220,7 +220,6 @@ struct quadtree
 	uint32_t merge_threshold;
 	uint32_t max_depth;
 	uint32_t dfs_length;
-	uint32_t merge_ht_size;
 	float min_size;
 
 	quadtree_node_t* nodes;
@@ -233,7 +232,6 @@ struct quadtree
 	quadtree_node_removal_t* node_removals;
 	quadtree_insertion_t* insertions;
 	quadtree_reinsertion_t* reinsertions;
-	uint32_t* merge_ht;
 
 	uint32_t nodes_used;
 	uint32_t nodes_size;

@@ -49,9 +49,6 @@ quadtree_init(
 
 	qt->dfs_length = qt->max_depth * 3 + 1;
 
-	qt->merge_ht_size = qt->merge_threshold ?
-		MACRO_NEXT_OR_EQUAL_POWER_OF_2(qt->merge_threshold * 2) : 1;
-
 	if(!qt->min_size)
 	{
 		qt->min_size = 1.0f;
@@ -59,9 +56,6 @@ quadtree_init(
 
 	qt->nodes = alloc_malloc(qt->nodes, 1);
 	assert_ptr(qt->nodes, 1);
-
-	qt->merge_ht = alloc_malloc(qt->merge_ht, qt->merge_ht_size);
-	assert_ptr(qt->merge_ht, qt->merge_ht_size);
 
 	qt->nodes_used = 1;
 	qt->nodes_size = 1;
@@ -88,7 +82,6 @@ quadtree_free(
 {
 	assert_not_null(qt);
 
-	alloc_free(qt->merge_ht, qt->merge_ht_size);
 	alloc_free(qt->reinsertions, qt->reinsertions_size);
 	alloc_free(qt->insertions, qt->insertions_size);
 	alloc_free(qt->node_removals, qt->node_removals_size);
@@ -854,8 +847,8 @@ quadtree_normalize(
 
 					rect_extent_t node_extent = half_to_rect_extent(info.extent);
 
-					assert_ge(qt->merge_ht_size, qt->merge_threshold);
-					memset(qt->merge_ht, 0, sizeof(*qt->merge_ht) * qt->merge_ht_size);
+					uint32_t merge_indexes[qt->merge_threshold];
+					uint32_t merge_count = 0;
 
 					for(uint32_t i = 0; i < 4; ++i)
 					{
@@ -870,45 +863,44 @@ quadtree_normalize(
 							uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
 							quadtree_entity_t* entity = entities + entity_idx;
 
-							uint32_t hash = (entity_idx * 2654435761u) & (qt->merge_ht_size - 1);
-							uint32_t* ht_entry = qt->merge_ht + hash;
-
 							uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
+							bool is_duplicate = false;
 
-							while(1)
+							if(entity->in_nodes_minus_one)
 							{
-								if(!*ht_entry)
+								for(uint32_t j = 0; j < merge_count; ++j)
 								{
-									*ht_entry = entity_idx;
-
-									node_entities.next[node_entity_idx] = node->head;
-									node_entities.entities[node_entity_idx].is_last = !node->head;
-									node->head = node_entity_idx;
-
-									rect_extent_t entity_extent = quadtree_get_entity_rect_extent(entity);
-									quadtree_reset_flags();
-
-									++node->count;
-
-									break;
-								}
-
-								if(*ht_entry == entity_idx)
-								{
-									node_entities.next[node_entity_idx] = free_node_entity;
-									free_node_entity = node_entity_idx;
-
-									--entity->in_nodes_minus_one;
-									if(entity_map[entity_idx])
+									if(merge_indexes[j] == entity_idx)
 									{
-										new_entities[entity_map[entity_idx]].in_nodes_minus_one = entity->in_nodes_minus_one;
+										is_duplicate = true;
+										break;
 									}
-
-									break;
 								}
+							}
 
-								hash = (hash + 1) & (qt->merge_ht_size - 1);
-								ht_entry = qt->merge_ht + hash;
+							if(!is_duplicate)
+							{
+								merge_indexes[merge_count++] = entity_idx;
+
+								node_entities.next[node_entity_idx] = node->head;
+								node_entities.entities[node_entity_idx].is_last = !node->head;
+								node->head = node_entity_idx;
+
+								rect_extent_t entity_extent = quadtree_get_entity_rect_extent(entity);
+								quadtree_reset_flags();
+
+								++node->count;
+							}
+							else
+							{
+								node_entities.next[node_entity_idx] = free_node_entity;
+								free_node_entity = node_entity_idx;
+
+								--entity->in_nodes_minus_one;
+								if(entity_map[entity_idx])
+								{
+									new_entities[entity_map[entity_idx]].in_nodes_minus_one = entity->in_nodes_minus_one;
+								}
 							}
 
 							node_entity_idx = next_node_entity_idx;
