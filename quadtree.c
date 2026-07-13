@@ -1765,7 +1765,10 @@ quadtree_collide(
 	}
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	uint32_t ht_size = qt->ht_entries_used * 2;
+	uint32_t ht_size = MACRO_NEXT_OR_EQUAL_POWER_OF_2(MACRO_MAX(qt->ht_entries_used * 2, 1));
+	uint32_t ht_mask = ht_size - 1;
+	assert_true(MACRO_IS_POWER_OF_2(ht_mask));
+
 	uint32_t* ht = alloc_calloc(ht, ht_size);
 	assert_ptr(ht, ht_size);
 
@@ -1829,7 +1832,7 @@ quadtree_collide(
 				}
 
 				uint32_t hash = index_a * 48611 + index_b * 50261;
-				hash %= ht_size;
+				hash &= ht_mask;
 
 				uint32_t index = ht[hash];
 				quadtree_ht_entry_t* entry;
