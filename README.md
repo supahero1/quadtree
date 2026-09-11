@@ -2,13 +2,13 @@ This is a C Quadtree that was written to be faster than "multi grids" and then e
 
 # Demonstration of power
 
-On my laptop at least, this Quadtree handles 400,000 entities of wildly varying sizes at around 17.5mspt, with 1,000x 1920x1080 queries taking around 0.26mspt. Here's a fraction of the simulation:
+On my laptop at least, this Quadtree handles 500,000 entities of wildly varying sizes at around 15mspt, with 1,000x 1920x1080 queries taking around 0.2mspt. Here's a fraction of the simulation:
 
 ![Screenshot of the simulation](simulation.png)
 
 If you want to run the simulation yourself, just execute `make` and see `test.c` for details. Naturally, the time figures given are only for demonstrative purposes only, as they can vary.
 
-For similar settings to my [HSHG](https://github.com/supahero1/hshg) (500k same sized entities and other parameters), it yields around 15.2mspt, beating it by ~15%. Finally I'm able to say hierarchical structures rock the game when written properly.
+For similar settings to my [HSHG](https://github.com/supahero1/hshg) (500k same sized entities and other parameters), it yields around 12.8mspt, beating it by ~37%. Finally I'm able to say hierarchical structures rock the game when written properly.
 
 # Disclaimer
 
