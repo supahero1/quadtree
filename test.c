@@ -27,7 +27,7 @@ entity_t;
 #include "heap.c"
 #include "quadtree.c"
 
-#define ITER UINT32_C(400000)
+#define ITER UINT32_C(500000)
 #define RADIUS_ODDS 2000.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 2048.0f

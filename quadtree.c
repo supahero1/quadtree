@@ -33,12 +33,12 @@ quadtree_init(
 
 	if(!qt->split_threshold)
 	{
-		qt->split_threshold = 13;
+		qt->split_threshold = 50;
 	}
 
 	if(!qt->merge_threshold && !qt->merge_threshold_set)
 	{
-		qt->merge_threshold = 12;
+		qt->merge_threshold = UINT32_MAX;
 	}
 	qt->merge_threshold = MACRO_MIN(qt->merge_threshold, qt->split_threshold - 1);
 
@@ -1223,6 +1223,28 @@ quadtree_normalize(
 						break;
 					}
 				}
+
+				uint32_t sorted_head = new_node->head;
+
+				for(uint32_t sort_idx = sorted_head + 1; sort_idx < new_node_entities_used; ++sort_idx)
+				{
+					uint32_t sort_entity_idx = new_node_entities.entities[sort_idx].index;
+					uint8_t sort_flags = new_node_entities.flags[sort_idx];
+					float sort_min_x = new_entities[sort_entity_idx].extent.min_x;
+
+					uint32_t insert_idx = sort_idx;
+
+					while(insert_idx > sorted_head &&
+						new_entities[new_node_entities.entities[insert_idx - 1].index].extent.min_x > sort_min_x)
+					{
+						new_node_entities.entities[insert_idx].index = new_node_entities.entities[insert_idx - 1].index;
+						new_node_entities.flags[insert_idx] = new_node_entities.flags[insert_idx - 1];
+						--insert_idx;
+					}
+
+					new_node_entities.entities[insert_idx].index = sort_entity_idx;
+					new_node_entities.flags[insert_idx] = sort_flags;
+				}
 			}
 		}
 		while(node_info != node_infos);
@@ -1797,6 +1819,11 @@ quadtree_collide(
 
 			uint32_t other_entity_idx = other_node_entity->index;
 			quadtree_entity_t* other_entity = entities + other_entity_idx;
+
+			if(other_entity->extent.min_x > entity->extent.max_x)
+			{
+				break;
+			}
 
 			if(!rect_extent_intersects(entity->extent, other_entity->extent))
 			{
