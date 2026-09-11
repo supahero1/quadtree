@@ -1224,26 +1224,32 @@ quadtree_normalize(
 					}
 				}
 
-				uint32_t sorted_head = new_node->head;
+				quadtree_node_entity_t* head_entity = new_node_entities.entities + new_node->head;
+				uint8_t* head_flags = new_node_entities.flags + new_node->head;
+				uint32_t sorted_count = new_node_entities_used - new_node->head;
 
-				for(uint32_t sort_idx = sorted_head + 1; sort_idx < new_node_entities_used; ++sort_idx)
+				for(uint32_t sort_idx = 1; sort_idx < sorted_count; ++sort_idx)
 				{
-					uint32_t sort_entity_idx = new_node_entities.entities[sort_idx].index;
-					uint8_t sort_flags = new_node_entities.flags[sort_idx];
-					float sort_min_x = new_entities[sort_entity_idx].extent.min_x;
+					quadtree_node_entity_t* insert_entity = head_entity + sort_idx;
+					uint8_t* insert_flags = head_flags + sort_idx;
 
-					uint32_t insert_idx = sort_idx;
+					uint32_t sort_entity_idx = insert_entity->index;
+					uint8_t sort_flags = *insert_flags;
+					float sort_min = new_entities[sort_entity_idx].extent.QUADTREE_SORT_BY_MEMBER_MIN;
 
-					while(insert_idx > sorted_head &&
-						new_entities[new_node_entities.entities[insert_idx - 1].index].extent.min_x > sort_min_x)
+					while(
+						insert_entity != head_entity &&
+						new_entities[insert_entity[-1].index].extent.QUADTREE_SORT_BY_MEMBER_MIN > sort_min
+						)
 					{
-						new_node_entities.entities[insert_idx].index = new_node_entities.entities[insert_idx - 1].index;
-						new_node_entities.flags[insert_idx] = new_node_entities.flags[insert_idx - 1];
-						--insert_idx;
+						insert_entity->index = insert_entity[-1].index;
+						*insert_flags = insert_flags[-1];
+						--insert_entity;
+						--insert_flags;
 					}
 
-					new_node_entities.entities[insert_idx].index = sort_entity_idx;
-					new_node_entities.flags[insert_idx] = sort_flags;
+					insert_entity->index = sort_entity_idx;
+					*insert_flags = sort_flags;
 				}
 			}
 		}
@@ -1820,7 +1826,7 @@ quadtree_collide(
 			uint32_t other_entity_idx = other_node_entity->index;
 			quadtree_entity_t* other_entity = entities + other_entity_idx;
 
-			if(other_entity->extent.min_x > entity->extent.max_x)
+			if(other_entity->extent.QUADTREE_SORT_BY_MEMBER_MIN > entity->extent.QUADTREE_SORT_BY_MEMBER_MAX)
 			{
 				break;
 			}
