@@ -54,16 +54,12 @@ quadtree_node_t;
 
 	typedef struct quadtree_entity_data
 	{
-		rect_extent_t rect_extent;
+		uint8_t unused;
 	}
 	quadtree_entity_data_t;
 
 
 	#define quadtree_entity_data quadtree_entity_data_t
-#endif
-
-#ifndef quadtree_get_entity_data_rect_extent
-	#define quadtree_get_entity_data_rect_extent(entity) (entity).rect_extent
 #endif
 
 
@@ -80,7 +76,7 @@ typedef struct quadtree_entity
 {
 	union
 	{
-		quadtree_entity_data data;
+		rect_extent_t extent;
 		uint32_t next;
 	};
 
@@ -91,10 +87,6 @@ typedef struct quadtree_entity
 	quadtree_status_t status;
 }
 quadtree_entity_t;
-
-
-#define quadtree_get_entity_rect_extent(entity)	\
-quadtree_get_entity_data_rect_extent((entity)->data)
 
 
 typedef struct quadtree_node_info
@@ -131,6 +123,7 @@ quadtree_node_removal_t;
 
 typedef struct quadtree_insertion
 {
+	rect_extent_t extent;
 	quadtree_entity_data data;
 }
 quadtree_insertion_t;
@@ -143,21 +136,14 @@ typedef struct quadtree_reinsertion
 quadtree_reinsertion_t;
 
 
-typedef struct quadtree_entity_info
-{
-	uint32_t idx;
-	quadtree_entity_data* data;
-}
-quadtree_entity_info_t;
-
-
 typedef struct quadtree quadtree_t;
 
 
 typedef quadtree_status_t
 (*quadtree_query_fn_t)(
 	quadtree_t* qt,
-	quadtree_entity_info_t info,
+	rect_extent_t* extent,
+	quadtree_entity_data* data,
 	void* user_data
 	);
 
@@ -173,8 +159,10 @@ typedef quadtree_status_t
 typedef void
 (*quadtree_collide_fn_t)(
 	const quadtree_t* qt,
-	quadtree_entity_info_t info_a,
-	quadtree_entity_info_t info_b,
+	rect_extent_t* extent_a,
+	quadtree_entity_data* data_a,
+	rect_extent_t* extent_b,
+	quadtree_entity_data* data_b,
 	void* user_data
 	);
 
@@ -182,7 +170,8 @@ typedef void
 typedef quadtree_status_t
 (*quadtree_update_fn_t)(
 	quadtree_t* qt,
-	quadtree_entity_info_t info,
+	rect_extent_t* extent,
+	quadtree_entity_data* data,
 	void* user_data
 	);
 
@@ -225,6 +214,7 @@ struct quadtree
 	quadtree_node_t* nodes;
 	quadtree_node_entities_t node_entities;
 	quadtree_entity_t* entities;
+	quadtree_entity_data* data;
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	quadtree_ht_entry_t* ht_entries;
 #endif
@@ -285,6 +275,7 @@ quadtree_free(
 extern void
 quadtree_insert(
 	quadtree_t* qt,
+	rect_extent_t extent,
 	const quadtree_entity_data* data
 	);
 
@@ -292,7 +283,7 @@ quadtree_insert(
 extern void
 quadtree_remove(
 	quadtree_t* qt,
-	uint32_t entity_idx
+	const quadtree_entity_data* data
 	);
 
 
