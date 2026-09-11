@@ -2,13 +2,11 @@
 
 typedef struct entity_t
 {
-	rect_extent_t extent;
 	float vx, vy;
 }
 entity_t;
 
 #define quadtree_entity_data entity_t
-#define quadtree_get_entity_data_rect_extent(entity) (entity).extent
 
 #include "window.c"
 #include "alloc/src/arena.c"
@@ -96,67 +94,66 @@ measure(
 static quadtree_status_t
 update_entity(
 	quadtree_t* qt,
-	quadtree_entity_info_t info,
+	rect_extent_t* extent,
+	entity_t* entity,
 	void* user_data
 	)
 {
 	(void) user_data;
 
-	entity_t* entity = info.data;
-
-	entity->extent.min_x += entity->vx;
-	entity->extent.max_x += entity->vx;
-	entity->extent.min_y += entity->vy;
-	entity->extent.max_y += entity->vy;
+	extent->min_x += entity->vx;
+	extent->max_x += entity->vx;
+	extent->min_y += entity->vy;
+	extent->max_y += entity->vy;
 
 #if CANT_ESCAPE_AREA == 1
-	if(entity->extent.min_x < qt->rect_extent.min_x)
+	if(extent->min_x < qt->rect_extent.min_x)
 	{
-		float width = entity->extent.max_x - entity->extent.min_x;
-		entity->extent.min_x = qt->rect_extent.min_x;
-		entity->extent.max_x = qt->rect_extent.min_x + width;
+		float width = extent->max_x - extent->min_x;
+		extent->min_x = qt->rect_extent.min_x;
+		extent->max_x = qt->rect_extent.min_x + width;
 		entity->vx = fabs(entity->vx) * BOUNDS_VELOCITY_LOSS;
 	}
-	else if(entity->extent.max_x > qt->rect_extent.max_x)
+	else if(extent->max_x > qt->rect_extent.max_x)
 	{
-		float width = entity->extent.max_x - entity->extent.min_x;
-		entity->extent.max_x = qt->rect_extent.max_x;
-		entity->extent.min_x = qt->rect_extent.max_x - width;
+		float width = extent->max_x - extent->min_x;
+		extent->max_x = qt->rect_extent.max_x;
+		extent->min_x = qt->rect_extent.max_x - width;
 		entity->vx = -fabs(entity->vx) * BOUNDS_VELOCITY_LOSS;
 	}
 
-	if(entity->extent.min_y < qt->rect_extent.min_y)
+	if(extent->min_y < qt->rect_extent.min_y)
 	{
-		float height = entity->extent.max_y - entity->extent.min_y;
-		entity->extent.min_y = qt->rect_extent.min_y;
-		entity->extent.max_y = qt->rect_extent.min_y + height;
+		float height = extent->max_y - extent->min_y;
+		extent->min_y = qt->rect_extent.min_y;
+		extent->max_y = qt->rect_extent.min_y + height;
 		entity->vy = fabs(entity->vy) * BOUNDS_VELOCITY_LOSS;
 	}
-	else if(entity->extent.max_y > qt->rect_extent.max_y)
+	else if(extent->max_y > qt->rect_extent.max_y)
 	{
-		float height = entity->extent.max_y - entity->extent.min_y;
-		entity->extent.max_y = qt->rect_extent.max_y;
-		entity->extent.min_y = qt->rect_extent.max_y - height;
+		float height = extent->max_y - extent->min_y;
+		extent->max_y = qt->rect_extent.max_y;
+		extent->min_y = qt->rect_extent.max_y - height;
 		entity->vy = -fabs(entity->vy) * BOUNDS_VELOCITY_LOSS;
 	}
 #else
-	if(entity->extent.min_x < qt->rect_extent.min_x)
+	if(extent->min_x < qt->rect_extent.min_x)
 	{
 		entity->vx *= BOUNDS_VELOCITY_LOSS;
 		++entity->vx;
 	}
-	else if(entity->extent.max_x > qt->rect_extent.max_x)
+	else if(extent->max_x > qt->rect_extent.max_x)
 	{
 		entity->vx *= BOUNDS_VELOCITY_LOSS;
 		--entity->vx;
 	}
 
-	if(entity->extent.min_y < qt->rect_extent.min_y)
+	if(extent->min_y < qt->rect_extent.min_y)
 	{
 		entity->vy *= BOUNDS_VELOCITY_LOSS;
 		++entity->vy;
 	}
-	else if(entity->extent.max_y > qt->rect_extent.max_y)
+	else if(extent->max_y > qt->rect_extent.max_y)
 	{
 		entity->vy *= BOUNDS_VELOCITY_LOSS;
 		--entity->vy;
@@ -169,29 +166,28 @@ update_entity(
 static void
 collide_entities(
 	const quadtree_t* qt,
-	quadtree_entity_info_t info_a,
-	quadtree_entity_info_t info_b,
+	rect_extent_t* rect_extent_a,
+	entity_t* entity_a,
+	rect_extent_t* rect_extent_b,
+	entity_t* entity_b,
 	void* user_data
 	)
 {
 	(void) qt;
 	(void) user_data;
 
-	entity_t* entity_a = info_a.data;
-	entity_t* entity_b = info_b.data;
+	half_extent_t half_extent_a = rect_to_half_extent(*rect_extent_a);
+	half_extent_t half_extent_b = rect_to_half_extent(*rect_extent_b);
 
-	half_extent_t extent_a = rect_to_half_extent(entity_a->extent);
-	half_extent_t extent_b = rect_to_half_extent(entity_b->extent);
-
-	float diff_x = extent_a.x - extent_b.x;
-	float diff_y = extent_a.y - extent_b.y;
-	float overlap_x = (extent_a.w + extent_b.w) - fabsf(diff_x);
-	float overlap_y = (extent_a.h + extent_b.h) - fabsf(diff_y);
+	float diff_x = half_extent_a.x - half_extent_b.x;
+	float diff_y = half_extent_a.y - half_extent_b.y;
+	float overlap_x = (half_extent_a.w + half_extent_b.w) - fabsf(diff_x);
+	float overlap_y = (half_extent_a.h + half_extent_b.h) - fabsf(diff_y);
 
 	if(overlap_x > 0 && overlap_y > 0)
 	{
-		float size_a = extent_a.w * extent_a.h * 4.0f;
-		float size_b = extent_b.w * extent_b.h * 4.0f;
+		float size_a = half_extent_a.w * half_extent_a.h * 4.0f;
+		float size_b = half_extent_b.w * half_extent_b.h * 4.0f;
 		float total_size = size_a + size_b;
 
 		if(overlap_x < overlap_y)
@@ -201,17 +197,17 @@ collide_entities(
 
 			if(diff_x > 0)
 			{
-				entity_a->extent.min_x += push_a;
-				entity_a->extent.max_x += push_a;
-				entity_b->extent.min_x -= push_b;
-				entity_b->extent.max_x -= push_b;
+				rect_extent_a->min_x += push_a;
+				rect_extent_a->max_x += push_a;
+				rect_extent_b->min_x -= push_b;
+				rect_extent_b->max_x -= push_b;
 			}
 			else
 			{
-				entity_a->extent.min_x -= push_a;
-				entity_a->extent.max_x -= push_a;
-				entity_b->extent.min_x += push_b;
-				entity_b->extent.max_x += push_b;
+				rect_extent_a->min_x -= push_a;
+				rect_extent_a->max_x -= push_a;
+				rect_extent_b->min_x += push_b;
+				rect_extent_b->max_x += push_b;
 			}
 
 			float temp_vx = entity_a->vx;
@@ -225,17 +221,17 @@ collide_entities(
 
 			if(diff_y > 0)
 			{
-				entity_a->extent.min_y += push_a;
-				entity_a->extent.max_y += push_a;
-				entity_b->extent.min_y -= push_b;
-				entity_b->extent.max_y -= push_b;
+				rect_extent_a->min_y += push_a;
+				rect_extent_a->max_y += push_a;
+				rect_extent_b->min_y -= push_b;
+				rect_extent_b->max_y -= push_b;
 			}
 			else
 			{
-				entity_a->extent.min_y -= push_a;
-				entity_a->extent.max_y -= push_a;
-				entity_b->extent.min_y += push_b;
-				entity_b->extent.max_y += push_b;
+				rect_extent_a->min_y -= push_a;
+				rect_extent_a->max_y -= push_a;
+				rect_extent_b->min_y += push_b;
+				rect_extent_b->max_y += push_b;
 			}
 
 			float temp_vy = entity_a->vy;
@@ -281,16 +277,16 @@ draw_node(
 static quadtree_status_t
 draw_entity(
 	quadtree_t* qt,
-	quadtree_entity_info_t info,
+	rect_extent_t* extent,
+	entity_t* entity,
 	void* user_data
 	)
 {
 	(void) qt;
+	(void) entity;
 	(void) user_data;
 
-	entity_t* entity = info.data;
-
-	rect_t rect = to_screen(entity->extent);
+	rect_t rect = to_screen(*extent);
 
 	for(int x = rect.min_x; x <= rect.max_x; ++x)
 	{
@@ -332,8 +328,11 @@ init(
 		, ITER, (long double) qt.half_extent.w * 2, (long double) qt.half_extent.h * 2, RADIUS_MIN, RADIUS_MAX
 		);
 
-	entity_t* rands = alloc_malloc(rands, ITER);
-	assert(rands);
+	entity_t* rands_data = alloc_malloc(rands_data, ITER);
+	assert(rands_data);
+
+	rect_extent_t* rands_extents = alloc_malloc(rands_extents, ITER);
+	assert(rands_extents);
 
 	for(int i = 0; i < ITER; ++i)
 	{
@@ -355,25 +354,25 @@ init(
 		float qtw = qt.half_extent.w * 2.0f - w;
 		float qth = qt.half_extent.h * 2.0f - h;
 
-		rands[i].extent.min_x = qt.rect_extent.min_x + qtw * randf();
-		rands[i].extent.max_x = rands[i].extent.min_x + w;
+		rands_extents[i].min_x = qt.rect_extent.min_x + qtw * randf();
+		rands_extents[i].max_x = rands_extents[i].min_x + w;
 
-		rands[i].extent.min_y = qt.rect_extent.min_y + qth * randf();
-		rands[i].extent.max_y = rands[i].extent.min_y + h;
+		rands_extents[i].min_y = qt.rect_extent.min_y + qth * randf();
+		rands_extents[i].max_y = rands_extents[i].min_y + h;
 
-		rands[i].vx = (1 - 2 * randf()) * INITIAL_VELOCITY;
-		rands[i].vy = (1 - 2 * randf()) * INITIAL_VELOCITY;
+		rands_data[i].vx = (1 - 2 * randf()) * INITIAL_VELOCITY;
+		rands_data[i].vy = (1 - 2 * randf()) * INITIAL_VELOCITY;
 	}
 
 	start = get_time();
 	for(int i = 0; i < ITER; ++i)
 	{
-		quadtree_insert(&qt, rands + i);
+		quadtree_insert(&qt, rands_extents[i], rands_data + i);
 	}
 	end = get_time();
 	printf("Queueing insertions took %.02lfms\n", end - start);
 
-	alloc_free(rands, ITER);
+	alloc_free(rands_data, ITER);
 }
 
 #if DO_THEM_QUERIES == 1
@@ -381,12 +380,14 @@ init(
 static quadtree_status_t
 query_ignore(
 	quadtree_t* qt,
-	quadtree_entity_info_t info,
+	rect_extent_t* extent,
+	entity_t* entity,
 	void* user_data
 	)
 {
 	(void) qt;
-	(void) info;
+	(void) extent;
+	(void) entity;
 	(void) user_data;
 
 	return QUADTREE_STATUS_NOT_CHANGED;
@@ -448,10 +449,10 @@ tick(
 		rect_extent_t extent =
 		(rect_extent_t)
 		{
-			.min_x = qt.entities[i].data.extent.min_x - 1920.0f * 0.5f,
-			.max_x = qt.entities[i].data.extent.max_x + 1920.0f * 0.5f,
-			.min_y = qt.entities[i].data.extent.min_y - 1080.0f * 0.5f,
-			.max_y = qt.entities[i].data.extent.max_y + 1080.0f * 0.5f
+			.min_x = qt.entities[i].extent.min_x - 1920.0f * 0.5f,
+			.max_x = qt.entities[i].extent.max_x + 1920.0f * 0.5f,
+			.min_y = qt.entities[i].extent.min_y - 1080.0f * 0.5f,
+			.max_y = qt.entities[i].extent.max_y + 1080.0f * 0.5f
 		};
 		quadtree_query_rect(&qt, extent, query_ignore, NULL);
 	}
