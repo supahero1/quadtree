@@ -2317,6 +2317,54 @@ quadtree_nearest_circle(
 }
 
 
+bool
+quadtree_ray_hits(
+	float x,
+	float y,
+	float inv_dx,
+	float inv_dy,
+	rect_extent_t extent,
+	float* out_t_min
+	)
+{
+	float t_min = -INFINITY;
+	float t_max = INFINITY;
+
+	if(isinf(inv_dx))
+	{
+		if(x < extent.min_x || x > extent.max_x)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		float t1 = (extent.min_x - x) * inv_dx;
+		float t2 = (extent.max_x - x) * inv_dx;
+		t_min = MACRO_MIN(t1, t2);
+		t_max = MACRO_MAX(t1, t2);
+	}
+
+	if(isinf(inv_dy))
+	{
+		if(y < extent.min_y || y > extent.max_y)
+		{
+			return false;
+		}
+	}
+	else
+	{
+		float t1 = (extent.min_y - y) * inv_dy;
+		float t2 = (extent.max_y - y) * inv_dy;
+		t_min = MACRO_MAX(t_min, MACRO_MIN(t1, t2));
+		t_max = MACRO_MIN(t_max, MACRO_MAX(t1, t2));
+	}
+
+	*out_t_min = MACRO_MAX(t_min, 0.0f);
+	return t_max >= t_min && t_max >= 0.0f && t_min <= 1.0f;
+}
+
+
 void
 quadtree_raycast(
 	quadtree_t* qt,
@@ -2350,24 +2398,15 @@ quadtree_raycast(
 	quadtree_ray_node_info_t stack[qt->dfs_length];
 	quadtree_ray_node_info_t* stack_ptr = stack;
 
-	float t1 = (qt->rect_extent.min_x - x) * inv_dx;
-	float t2 = (qt->rect_extent.max_x - x) * inv_dx;
-	float t_min = MACRO_MIN(t1, t2);
-	float t_max = MACRO_MAX(t1, t2);
-
-	t1 = (qt->rect_extent.min_y - y) * inv_dy;
-	t2 = (qt->rect_extent.max_y - y) * inv_dy;
-	t_min = MACRO_MAX(t_min, MACRO_MIN(t1, t2));
-	t_max = MACRO_MIN(t_max, MACRO_MAX(t1, t2));
-
-	if(t_max >= t_min && t_max >= 0.0f && t_min <= 1.0f)
+	float t_min;
+	if(quadtree_ray_hits(x, y, inv_dx, inv_dy, qt->rect_extent, &t_min))
 	{
 		*(stack_ptr++) =
 		(quadtree_ray_node_info_t)
 		{
 			.node_idx = 0,
 			.extent = qt->half_extent,
-			.t_min = MACRO_MAX(t_min, 0.0f)
+			.t_min = t_min
 		};
 	}
 
@@ -2399,26 +2438,15 @@ quadtree_raycast(
 					.h = half_h
 				};
 
-				rect_extent_t r = half_to_rect_extent(child_ext);
-
-				float t1 = (r.min_x - x) * inv_dx;
-				float t2 = (r.max_x - x) * inv_dx;
-				float c_t_min = MACRO_MIN(t1, t2);
-				float c_t_max = MACRO_MAX(t1, t2);
-
-				t1 = (r.min_y - y) * inv_dy;
-				t2 = (r.max_y - y) * inv_dy;
-				c_t_min = MACRO_MAX(c_t_min, MACRO_MIN(t1, t2));
-				c_t_max = MACRO_MIN(c_t_max, MACRO_MAX(t1, t2));
-
-				if(c_t_max >= c_t_min && c_t_max >= 0.0f && c_t_min <= 1.0f)
+				float c_t_min;
+				if(quadtree_ray_hits(x, y, inv_dx, inv_dy, half_to_rect_extent(child_ext), &c_t_min))
 				{
 					children[child_count++] =
 					(quadtree_ray_node_info_t)
 					{
 						.node_idx = node->heads[i],
 						.extent = child_ext,
-						.t_min = MACRO_MAX(c_t_min, 0.0f)
+						.t_min = c_t_min
 					};
 				}
 			}
@@ -2466,17 +2494,8 @@ quadtree_raycast(
 			{
 				entity->query_tick = query_tick;
 
-				float t1 = (entity->extent.min_x - x) * inv_dx;
-				float t2 = (entity->extent.max_x - x) * inv_dx;
-				float e_t_min = MACRO_MIN(t1, t2);
-				float e_t_max = MACRO_MAX(t1, t2);
-
-				t1 = (entity->extent.min_y - y) * inv_dy;
-				t2 = (entity->extent.max_y - y) * inv_dy;
-				e_t_min = MACRO_MAX(e_t_min, MACRO_MIN(t1, t2));
-				e_t_max = MACRO_MIN(e_t_max, MACRO_MAX(t1, t2));
-
-				if(e_t_max >= e_t_min && e_t_max >= 0.0f && e_t_min <= 1.0f)
+				float e_t_min;
+				if(quadtree_ray_hits(x, y, inv_dx, inv_dy, entity->extent, &e_t_min))
 				{
 					if(query_fn(qt, &entity->extent, data + entity_idx, user_data) == QUADTREE_STATUS_CHANGED)
 					{
