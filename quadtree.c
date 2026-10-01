@@ -730,28 +730,10 @@ quadtree_normalize(
 		quadtree_entity_data* new_data;
 
 		uint32_t new_nodes_used = 0;
-		uint32_t new_nodes_size;
-
-		if(nodes_size >> 2 < nodes_used)
-		{
-			new_nodes_size = nodes_size;
-		}
-		else
-		{
-			new_nodes_size = nodes_size >> 1;
-		}
+		uint32_t new_nodes_size = nodes_size;
 
 		uint32_t new_node_entities_used = 1;
-		uint32_t new_node_entities_size;
-
-		if(node_entities_size >> 2 < node_entities_used)
-		{
-			new_node_entities_size = node_entities_size;
-		}
-		else
-		{
-			new_node_entities_size = node_entities_size >> 1;
-		}
+		uint32_t new_node_entities_size = node_entities_size;
 
 		uint32_t new_entities_used = 1;
 		uint32_t new_entities_size;
@@ -1254,6 +1236,32 @@ quadtree_normalize(
 			}
 		}
 		while(node_info != node_infos);
+
+		if(new_nodes_size >> 2 >= new_nodes_used)
+		{
+			uint32_t new_size = new_nodes_size >> 1;
+
+			new_nodes = alloc_remalloc(new_nodes, new_nodes_size, new_size);
+			assert_not_null(new_nodes);
+
+			new_nodes_size = new_size;
+		}
+
+		if(new_node_entities_size >> 2 >= new_node_entities_used)
+		{
+			uint32_t new_size = new_node_entities_size >> 1;
+
+			new_node_entities.next = alloc_remalloc(new_node_entities.next, new_node_entities_size, new_size);
+			assert_not_null(new_node_entities.next);
+
+			new_node_entities.entities = alloc_remalloc(new_node_entities.entities, new_node_entities_size, new_size);
+			assert_not_null(new_node_entities.entities);
+
+			new_node_entities.flags = alloc_remalloc(new_node_entities.flags, new_node_entities_size, new_size);
+			assert_not_null(new_node_entities.flags);
+
+			new_node_entities_size = new_size;
+		}
 
 		alloc_free(nodes, nodes_size);
 		qt->nodes = new_nodes;
