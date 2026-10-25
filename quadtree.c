@@ -1404,6 +1404,7 @@ quadtree_update_walk(
 	quadtree_node_t* nodes = qt->nodes;
 	uint32_t* node_entities_next = qt->node_entities.next;
 	quadtree_node_entity_t* node_entities = qt->node_entities.entities;
+	quadtree_node_entity_t* node_entities_end = node_entities + qt->node_entities_used;
 	uint8_t* node_entities_flags = qt->node_entities.flags;
 	uint8_t* node_entities_flags_copy = node_entities_flags;
 	quadtree_entity_t* entities = qt->entities;
@@ -1457,6 +1458,13 @@ quadtree_update_walk(
 		{
 			++callback_next;
 			++callback_entity;
+
+			if(callback_entity + QUADTREE_GATHER_PREFETCH < node_entities_end)
+			{
+				uint32_t prefetch_idx = callback_entity[QUADTREE_GATHER_PREFETCH].index;
+				__builtin_prefetch(entities + prefetch_idx);
+				__builtin_prefetch(data + prefetch_idx);
+			}
 
 			uint32_t entity_idx = callback_entity->index;
 			quadtree_entity_t* entity = entities + entity_idx;
