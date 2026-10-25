@@ -27,6 +27,10 @@
 	#define QUADTREE_SORT_BY y
 #endif
 
+#ifndef QUADTREE_REORDER_SHIFT
+	#define QUADTREE_REORDER_SHIFT 6
+#endif
+
 #define QUADTREE_SORT_BY_MEMBER_IMPL(x, y) x##y
 #define QUADTREE_SORT_BY_MEMBER_EXPAND(x, y) QUADTREE_SORT_BY_MEMBER_IMPL(x, y)
 #define QUADTREE_SORT_BY_MEMBER_MIN QUADTREE_SORT_BY_MEMBER_EXPAND(min_, QUADTREE_SORT_BY)
@@ -257,6 +261,9 @@ struct quadtree
 
 	uint32_t reinsertions_used;
 	uint32_t reinsertions_size;
+
+	uint32_t free_entity;
+	uint32_t reorder_churn;
 
 	uint32_t query_tick;
 	uint8_t update_tick;

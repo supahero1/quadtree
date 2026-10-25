@@ -372,9 +372,11 @@ quadtree_normalize(
 	uint32_t node_entities_used = qt->node_entities_used;
 	uint32_t node_entities_size = qt->node_entities_size;
 
-	uint32_t free_entity = 0;
+	uint32_t free_entity = qt->free_entity;
 	uint32_t entities_used = qt->entities_used;
 	uint32_t entities_size = qt->entities_size;
+
+	qt->reorder_churn += qt->reinsertions_used + qt->removals_used + qt->insertions_used;
 
 	quadtree_node_info_t node_infos[qt->dfs_length];
 	quadtree_node_info_t* node_info;
@@ -591,6 +593,7 @@ quadtree_normalize(
 			while(node_info != node_infos);
 
 			entity->next = free_entity;
+			entity->in_nodes_minus_one = UINT32_MAX;
 			free_entity = entity_idx;
 
 			++removal;
@@ -724,6 +727,12 @@ quadtree_normalize(
 
 
 	{
+		bool reorder = qt->reorder_churn >= (entities_used >> QUADTREE_REORDER_SHIFT);
+		if(reorder)
+		{
+			qt->reorder_churn = 0;
+		}
+
 		uint32_t free_node = 0;
 		uint32_t nodes_used = qt->nodes_used;
 		uint32_t nodes_size = qt->nodes_size;
@@ -763,14 +772,26 @@ quadtree_normalize(
 		new_node_entities.flags = alloc_malloc(new_node_entities.flags, new_node_entities_size);
 		assert_ptr(new_node_entities.flags, new_node_entities_size);
 
-		new_entities = alloc_malloc(new_entities, new_entities_size);
-		assert_ptr(new_entities, new_entities_size);
+		uint32_t* entity_map = NULL;
 
-		new_data = alloc_malloc(new_data, new_entities_size);
-		assert_ptr(new_data, new_entities_size);
+		if(reorder)
+		{
+			new_entities = alloc_malloc(new_entities, new_entities_size);
+			assert_ptr(new_entities, new_entities_size);
 
-		uint32_t* entity_map = alloc_calloc(entity_map, entities_size);
-		assert_ptr(entity_map, entities_size);
+			new_data = alloc_malloc(new_data, new_entities_size);
+			assert_ptr(new_data, new_entities_size);
+
+			entity_map = alloc_calloc(entity_map, entities_size);
+			assert_ptr(entity_map, entities_size);
+		}
+		else
+		{
+			new_entities = entities;
+			new_data = data;
+			new_entities_used = entities_used;
+			new_entities_size = entities_size;
+		}
 
 
 		typedef struct quadtree_node_reorder_info
@@ -892,7 +913,7 @@ quadtree_normalize(
 								free_node_entity = node_entity_idx;
 
 								--entity->in_nodes_minus_one;
-								if(entity_map[entity_idx])
+								if(reorder && entity_map[entity_idx])
 								{
 									new_entities[entity_map[entity_idx]].in_nodes_minus_one = entity->in_nodes_minus_one;
 								}
@@ -1017,7 +1038,7 @@ quadtree_normalize(
 					}
 
 					entity->in_nodes_minus_one += current_target_node_idx - target_node_idxs - 1;
-					if(entity_map[entity_idx])
+					if(reorder && entity_map[entity_idx])
 					{
 						new_entities[entity_map[entity_idx]].in_nodes_minus_one = entity->in_nodes_minus_one;
 					}
@@ -1182,7 +1203,7 @@ quadtree_normalize(
 				while(1)
 				{
 					uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
-					if(!entity_map[entity_idx])
+					if(reorder && !entity_map[entity_idx])
 					{
 						uint32_t new_entity_idx = new_entities_used++;
 						entity_map[entity_idx] = new_entity_idx;
@@ -1190,7 +1211,7 @@ quadtree_normalize(
 						new_data[new_entity_idx] = data[entity_idx];
 					}
 
-					uint32_t new_entity_idx = entity_map[entity_idx];
+					uint32_t new_entity_idx = reorder ? entity_map[entity_idx] : entity_idx;
 					new_node_entities.entities[new_node_entities_used].index = new_entity_idx;
 					new_node_entities.flags[new_node_entities_used] = node_entities.flags[node_entity_idx];
 
@@ -1279,15 +1300,21 @@ quadtree_normalize(
 		qt->node_entities_used = new_node_entities_used;
 		qt->node_entities_size = new_node_entities_size;
 
-		alloc_free(entities, entities_size);
+		if(reorder)
+		{
+			alloc_free(entities, entities_size);
+			alloc_free(data, entities_size);
+			alloc_free(entity_map, entities_size);
+
+			free_entity = 0;
+		}
+
 		qt->entities = new_entities;
 		qt->entities_used = new_entities_used;
 		qt->entities_size = new_entities_size;
-
-		alloc_free(data, entities_size);
 		qt->data = new_data;
 
-		alloc_free(entity_map, entities_size);
+		qt->free_entity = free_entity;
 	}
 }
 
@@ -2775,6 +2802,12 @@ quadtree_check_in_nodes_count(
 
 	while(entity < entity_end)
 	{
+		if(entity->in_nodes_minus_one == UINT32_MAX)
+		{
+			++entity;
+			continue;
+		}
+
 		uint32_t check_count = 0;
 		quadtree_query_nodes_rect(qt, entity->extent, quadtree_check_count_node, &check_count);
 
