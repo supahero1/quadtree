@@ -35,7 +35,7 @@ entity_t;
 #define ARENA_WIDTH 100000.0f
 #define ARENA_HEIGHT 100000.0f
 #define MEASURE_TICKS 1000
-#define INITIAL_VELOCITY 0.9f
+#define INITIAL_VELOCITY 0.7f
 #define BOUNDS_VELOCITY_LOSS 0.99f
 #define CANT_ESCAPE_AREA 1
 #define DO_THEM_QUERIES 1
@@ -334,6 +334,8 @@ init(
 	rect_extent_t* rands_extents = alloc_malloc(rands_extents, ITER);
 	assert(rands_extents);
 
+	double total_area = 0;
+
 	for(int i = 0; i < ITER; ++i)
 	{
 		float dim[2];
@@ -360,8 +362,21 @@ init(
 		rands_extents[i].min_y = qt.rect_extent.min_y + qth * randf();
 		rands_extents[i].max_y = rands_extents[i].min_y + h;
 
-		rands_data[i].vx = (1 - 2 * randf()) * INITIAL_VELOCITY;
-		rands_data[i].vy = (1 - 2 * randf()) * INITIAL_VELOCITY;
+		total_area += w * h;
+	}
+
+	float mean_area = total_area / ITER;
+
+	for(int i = 0; i < ITER; ++i)
+	{
+		float w = rands_extents[i].max_x - rands_extents[i].min_x;
+		float h = rands_extents[i].max_y - rands_extents[i].min_y;
+
+		float speed = INITIAL_VELOCITY * sqrtf(mean_area / (w * h));
+		float angle = randf() * 2.0f * (float) M_PI;
+
+		rands_data[i].vx = cosf(angle) * speed;
+		rands_data[i].vy = sinf(angle) * speed;
 	}
 
 	start = get_time();
