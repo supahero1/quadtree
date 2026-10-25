@@ -413,6 +413,7 @@ quadtree_normalize(
 			}
 
 			--node->count;
+			node->position_flags |= QUADTREE_NODE_DIRTY;
 			--entity->in_nodes_minus_one;
 
 			*node_entity_next = free_node_entity;
@@ -508,6 +509,7 @@ quadtree_normalize(
 				node->head = node_entity_idx;
 
 				++node->count;
+				node->position_flags |= QUADTREE_NODE_DIRTY;
 
 				goto_skip:;
 
@@ -579,6 +581,7 @@ quadtree_normalize(
 						}
 
 						--node->count;
+						node->position_flags |= QUADTREE_NODE_DIRTY;
 
 						node_entities.next[node_entity_idx] = free_node_entity;
 						free_node_entity = node_entity_idx;
@@ -710,6 +713,7 @@ quadtree_normalize(
 				quadtree_reset_flags();
 
 				++node->count;
+				node->position_flags |= QUADTREE_NODE_DIRTY;
 			}
 			while(node_info != node_infos);
 
@@ -909,6 +913,7 @@ quadtree_normalize(
 								quadtree_reset_flags();
 
 								++node->count;
+								node->position_flags |= QUADTREE_NODE_DIRTY;
 							}
 							else
 							{
@@ -1005,7 +1010,7 @@ quadtree_normalize(
 						0b1100
 					};
 
-					child->position_flags = position_flags & position_flags_mask[i];
+					child->position_flags = (position_flags & position_flags_mask[i]) | QUADTREE_NODE_DIRTY;
 				}
 
 				uint32_t node_entity_idx = head;
@@ -1187,7 +1192,7 @@ quadtree_normalize(
 			}
 			else
 			{
-				new_node->position_flags = node->position_flags;
+				new_node->position_flags = node->position_flags & ~QUADTREE_NODE_DIRTY;
 				new_node->type = QUADTREE_NODE_TYPE_LEAF;
 
 				if(!node->head)
@@ -1213,38 +1218,59 @@ quadtree_normalize(
 					sort_keys_size = new_size;
 				}
 
-				uint32_t idx_in_leaf = 0;
-
-				while(1)
+				if(!reorder && !(node->position_flags & QUADTREE_NODE_DIRTY))
 				{
-					uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
-					sort_keys[idx_in_leaf++] = entities[entity_idx].extent.QUADTREE_SORT_BY_MEMBER_MIN;
+					memcpy(new_node_entities.entities + new_node_entities_used, node_entities.entities + node_entity_idx,
+						sizeof(*new_node_entities.entities) * node->count);
+					memcpy(new_node_entities.flags + new_node_entities_used, node_entities.flags + node_entity_idx,
+						sizeof(*new_node_entities.flags) * node->count);
 
-					if(reorder && !entity_map[entity_idx])
+					for(uint32_t idx_in_leaf = 0; idx_in_leaf < node->count; ++idx_in_leaf)
 					{
-						uint32_t new_entity_idx = new_entities_used++;
-						entity_map[entity_idx] = new_entity_idx;
-						new_entities[new_entity_idx] = entities[entity_idx];
-						new_data[new_entity_idx] = data[entity_idx];
-					}
+						uint32_t entity_idx = new_node_entities.entities[new_node_entities_used].index;
+						sort_keys[idx_in_leaf] = entities[entity_idx].extent.QUADTREE_SORT_BY_MEMBER_MIN;
 
-					uint32_t new_entity_idx = reorder ? entity_map[entity_idx] : entity_idx;
-					new_node_entities.entities[new_node_entities_used].index = new_entity_idx;
-					new_node_entities.flags[new_node_entities_used] = node_entities.flags[node_entity_idx];
-
-					if(node_entities.next[node_entity_idx])
-					{
-						node_entity_idx = node_entities.next[node_entity_idx];
-						new_node_entities.entities[new_node_entities_used].is_last = false;
 						new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
 						++new_node_entities_used;
 					}
-					else
+
+					new_node_entities.next[new_node_entities_used - 1] = 0;
+				}
+				else
+				{
+					uint32_t idx_in_leaf = 0;
+
+					while(1)
 					{
-						new_node_entities.entities[new_node_entities_used].is_last = true;
-						new_node_entities.next[new_node_entities_used] = 0;
-						++new_node_entities_used;
-						break;
+						uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
+						sort_keys[idx_in_leaf++] = entities[entity_idx].extent.QUADTREE_SORT_BY_MEMBER_MIN;
+
+						if(reorder && !entity_map[entity_idx])
+						{
+							uint32_t new_entity_idx = new_entities_used++;
+							entity_map[entity_idx] = new_entity_idx;
+							new_entities[new_entity_idx] = entities[entity_idx];
+							new_data[new_entity_idx] = data[entity_idx];
+						}
+
+						uint32_t new_entity_idx = reorder ? entity_map[entity_idx] : entity_idx;
+						new_node_entities.entities[new_node_entities_used].index = new_entity_idx;
+						new_node_entities.flags[new_node_entities_used] = node_entities.flags[node_entity_idx];
+
+						if(node_entities.next[node_entity_idx])
+						{
+							node_entity_idx = node_entities.next[node_entity_idx];
+							new_node_entities.entities[new_node_entities_used].is_last = false;
+							new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
+							++new_node_entities_used;
+						}
+						else
+						{
+							new_node_entities.entities[new_node_entities_used].is_last = true;
+							new_node_entities.next[new_node_entities_used] = 0;
+							++new_node_entities_used;
+							break;
+						}
 					}
 				}
 

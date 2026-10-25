@@ -49,6 +49,9 @@ typedef enum quadtree_node_type
 quadtree_node_type_t;
 
 
+#define QUADTREE_NODE_DIRTY (UINT32_C(1) << 31)
+
+
 typedef union quadtree_node
 {
 	uint32_t next;
