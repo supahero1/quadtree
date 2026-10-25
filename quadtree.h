@@ -269,8 +269,13 @@ struct quadtree
 	uint32_t reinsertions_used;
 	uint32_t reinsertions_size;
 
-	uint32_t free_entity;
 	uint32_t reorder_churn;
+	uint32_t live_entities;
+	uint32_t region_size;
+	uint32_t region_cursor[2];
+	uint8_t home_region;
+	uint32_t migrate_position;
+	bool force_reorder;
 
 	uint32_t query_tick;
 	uint8_t update_tick;

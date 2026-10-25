@@ -67,6 +67,8 @@ quadtree_init(
 	qt->node_entities_used = 1;
 
 	qt->entities_used = 1;
+	qt->region_cursor[0] = 1;
+	qt->region_cursor[1] = 1;
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
 	qt->ht_entries_used = 1;
@@ -326,6 +328,12 @@ quadtree_remove(
 	assert_not_null(data);
 
 	uint32_t entity_idx = data - qt->data;
+
+	if(qt->entities[entity_idx].in_nodes_minus_one == UINT32_MAX)
+	{
+		entity_idx = qt->entities[entity_idx].next;
+	}
+
 	assert_gt(entity_idx, 0);
 	assert_lt(entity_idx, qt->entities_used);
 
@@ -346,6 +354,26 @@ quadtree_remove(
 	removal->entity_idx = entity_idx;
 
 	qt->normalization |= QUADTREE_NOT_NORMALIZED_HARD;
+}
+
+
+static inline uint32_t
+quadtree_region_base(
+	const quadtree_t* qt,
+	uint32_t region
+	)
+{
+	return 1 + region * qt->region_size;
+}
+
+
+static inline uint32_t
+quadtree_region_end(
+	const quadtree_t* qt,
+	uint32_t region
+	)
+{
+	return 1 + (region + 1) * qt->region_size;
 }
 
 
@@ -372,7 +400,6 @@ quadtree_normalize(
 	uint32_t node_entities_used = qt->node_entities_used;
 	uint32_t node_entities_size = qt->node_entities_size;
 
-	uint32_t free_entity = qt->free_entity;
 	uint32_t entities_used = qt->entities_used;
 	uint32_t entities_size = qt->entities_size;
 
@@ -595,9 +622,9 @@ quadtree_normalize(
 			}
 			while(node_info != node_infos);
 
-			entity->next = free_entity;
+			entity->next = 0;
 			entity->in_nodes_minus_one = UINT32_MAX;
-			free_entity = entity_idx;
+			--qt->live_entities;
 
 			++removal;
 		}
@@ -617,16 +644,17 @@ quadtree_normalize(
 		while(insertion != insertion_end)
 		{
 			uint32_t entity_idx;
-			quadtree_entity_t* entity;
+			uint32_t region = qt->home_region ^ 1;
 
-			if(free_entity)
+			if(qt->region_cursor[region] < quadtree_region_end(qt, region))
 			{
-				entity_idx = free_entity;
-				entity = entities + entity_idx;
-				free_entity = entity->next;
+				entity_idx = qt->region_cursor[region]++;
 			}
 			else
 			{
+				qt->force_reorder = true;
+				entities_used = MACRO_MAX(entities_used, quadtree_region_end(qt, 1));
+
 				if(entities_used >= entities_size)
 				{
 					uint32_t new_size = (entities_used << 1) | 3;
@@ -641,9 +669,12 @@ quadtree_normalize(
 					entities_size = new_size;
 				}
 
-				entity_idx = entities_used++;
-				entity = entities + entity_idx;
+				entity_idx = entities_used;
 			}
+
+			entities_used = MACRO_MAX(entities_used, entity_idx + 1);
+			quadtree_entity_t* entity = entities + entity_idx;
+			++qt->live_entities;
 
 			data[entity_idx] = insertion->data;
 			entity->extent = insertion->extent;
@@ -731,11 +762,8 @@ quadtree_normalize(
 
 
 	{
-		bool reorder = qt->reorder_churn >= (entities_used >> QUADTREE_REORDER_SHIFT);
-		if(reorder)
-		{
-			qt->reorder_churn = 0;
-		}
+		bool reorder = qt->force_reorder;
+		qt->force_reorder = false;
 
 		uint32_t free_node = 0;
 		uint32_t nodes_used = qt->nodes_used;
@@ -753,16 +781,8 @@ quadtree_normalize(
 		uint32_t new_node_entities_size = node_entities_size;
 
 		uint32_t new_entities_used = 1;
-		uint32_t new_entities_size;
-
-		if(entities_size >> 2 < entities_used)
-		{
-			new_entities_size = entities_size;
-		}
-		else
-		{
-			new_entities_size = entities_size >> 1;
-		}
+		uint32_t new_region_size = qt->live_entities + (qt->live_entities >> 2) + 256;
+		uint32_t new_entities_size = 1 + new_region_size * 2;
 
 		new_nodes = alloc_malloc(new_nodes, new_nodes_size);
 		assert_ptr(new_nodes, new_nodes_size);
@@ -1357,15 +1377,22 @@ quadtree_normalize(
 			alloc_free(data, entities_size);
 			alloc_free(entity_map, entities_size);
 
-			free_entity = 0;
+			for(uint32_t i = new_entities_used; i < new_entities_size; ++i)
+			{
+				new_entities[i].in_nodes_minus_one = UINT32_MAX;
+			}
+
+			qt->region_size = new_region_size;
+			qt->region_cursor[0] = new_entities_used;
+			qt->region_cursor[1] = quadtree_region_base(qt, 1);
+			qt->home_region = 0;
+			qt->migrate_position = 0;
 		}
 
 		qt->entities = new_entities;
 		qt->entities_used = new_entities_used;
 		qt->entities_size = new_entities_size;
 		qt->data = new_data;
-
-		qt->free_entity = free_entity;
 	}
 }
 
@@ -1400,6 +1427,32 @@ quadtree_update(
 
 	qt->update_tick ^= 1;
 	uint32_t update_tick = qt->update_tick;
+
+	uint64_t slice_length = (uint64_t) qt->reorder_churn << QUADTREE_REORDER_SHIFT;
+	qt->reorder_churn = 0;
+
+	uint32_t slice_begin = qt->migrate_position;
+	uint32_t slice_end = MACRO_MIN(slice_begin + slice_length, qt->node_entities_used);
+
+	if(slice_begin == 0 && qt->live_entities + (qt->live_entities >> 5) > qt->region_size)
+	{
+		qt->force_reorder = true;
+		slice_end = slice_begin;
+	}
+
+	bool last_slice = slice_end >= qt->node_entities_used;
+	if(last_slice)
+	{
+		slice_begin = 0;
+		slice_end = UINT32_MAX;
+	}
+
+	uint32_t target = qt->home_region ^ 1;
+	uint32_t source_base = quadtree_region_base(qt, qt->home_region);
+	uint32_t source_end = quadtree_region_end(qt, qt->home_region);
+	uint32_t target_end = quadtree_region_end(qt, target);
+	uint32_t cursor = qt->region_cursor[target];
+	bool overflowed = false;
 
 	quadtree_node_t* nodes = qt->nodes;
 	uint32_t* node_entities_next = qt->node_entities.next;
@@ -1447,6 +1500,9 @@ quadtree_update(
 
 		rect_extent_t node_extent = half_to_rect_extent(info.extent);
 
+		bool forward = node->head >= slice_begin;
+		bool move = forward && node->head < slice_end;
+
 		do
 		{
 			++node_entities_next;
@@ -1455,6 +1511,38 @@ quadtree_update(
 
 			uint32_t entity_idx = node_entities->index;
 			quadtree_entity_t* entity = entities + entity_idx;
+
+			if(forward)
+			{
+				if(entity->in_nodes_minus_one == UINT32_MAX)
+				{
+					entity_idx = entity->next;
+					node_entities->index = entity_idx;
+					entity = entities + entity_idx;
+				}
+				else if(move && entity->update_tick != update_tick &&
+					entity_idx >= source_base && entity_idx < source_end)
+				{
+					if(cursor < target_end)
+					{
+						uint32_t new_entity_idx = cursor++;
+
+						entities[new_entity_idx] = *entity;
+						data[new_entity_idx] = data[entity_idx];
+
+						entity->in_nodes_minus_one = UINT32_MAX;
+						entity->next = new_entity_idx;
+
+						node_entities->index = new_entity_idx;
+						entity_idx = new_entity_idx;
+						entity = entities + entity_idx;
+					}
+					else
+					{
+						overflowed = true;
+					}
+				}
+			}
 
 			if(entity->update_tick != update_tick)
 			{
@@ -1545,6 +1633,80 @@ quadtree_update(
 		while(*node_entities_next);
 	}
 	while(node_info != node_infos);
+
+	{
+		quadtree_reinsertion_t* reinsertion = reinsertions;
+		quadtree_reinsertion_t* reinsertion_end = reinsertion + qt->reinsertions_used;
+
+		while(reinsertion != reinsertion_end)
+		{
+			quadtree_entity_t* entity = entities + reinsertion->entity_idx;
+
+			if(entity->in_nodes_minus_one == UINT32_MAX)
+			{
+				reinsertion->entity_idx = entity->next;
+			}
+
+			++reinsertion;
+		}
+	}
+
+	{
+		quadtree_node_removal_t* node_removal = node_removals;
+		quadtree_node_removal_t* node_removal_end = node_removal + qt->node_removals_used;
+
+		while(node_removal != node_removal_end)
+		{
+			quadtree_entity_t* entity = entities + node_removal->entity_idx;
+
+			if(entity->in_nodes_minus_one == UINT32_MAX)
+			{
+				node_removal->entity_idx = entity->next;
+			}
+
+			++node_removal;
+		}
+	}
+
+	{
+		quadtree_removal_t* removal = qt->removals;
+		quadtree_removal_t* removal_end = removal + qt->removals_used;
+
+		while(removal != removal_end)
+		{
+			quadtree_entity_t* entity = entities + removal->entity_idx;
+
+			if(entity->in_nodes_minus_one == UINT32_MAX)
+			{
+				removal->entity_idx = entity->next;
+			}
+
+			++removal;
+		}
+	}
+
+	qt->region_cursor[target] = cursor;
+	qt->entities_used = MACRO_MAX(qt->entities_used, cursor);
+
+	if(overflowed)
+	{
+		qt->force_reorder = true;
+	}
+	else if(last_slice)
+	{
+		qt->region_cursor[qt->home_region] = source_base;
+		qt->home_region = target;
+		qt->migrate_position = 0;
+
+		if(qt->entities_used <= quadtree_region_end(qt, 1))
+		{
+			qt->entities_used = cursor;
+		}
+	}
+	else
+	{
+		qt->migrate_position = slice_end;
+	}
 
 	qt->reinsertions = reinsertions;
 	qt->reinsertions_used = reinsertions_used;
