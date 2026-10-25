@@ -820,9 +820,18 @@ quadtree_normalize_rebuild(
 					new_node_entities.entities[new_node_entities_used].index = new_entity_idx;
 					new_node_entities.flags[new_node_entities_used] = node_entities.flags[node_entity_idx];
 
-					if(node_entities.next[node_entity_idx])
+					uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
+
+					if(next_node_entity_idx - node_entity_idx == 1)
 					{
-						node_entity_idx = node_entities.next[node_entity_idx];
+						++node_entity_idx;
+						new_node_entities.entities[new_node_entities_used].is_last = false;
+						new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
+						++new_node_entities_used;
+					}
+					else if(next_node_entity_idx)
+					{
+						node_entity_idx = next_node_entity_idx;
 						new_node_entities.entities[new_node_entities_used].is_last = false;
 						new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
 						++new_node_entities_used;
