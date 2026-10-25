@@ -329,7 +329,7 @@ quadtree_remove(
 
 	uint32_t entity_idx = data - qt->data;
 
-	if(qt->entities[entity_idx].in_nodes_minus_one == UINT32_MAX)
+	if(!qt->entities[entity_idx].in_nodes)
 	{
 		entity_idx = qt->entities[entity_idx].next;
 	}
@@ -441,7 +441,7 @@ quadtree_normalize(
 
 			--node->count;
 			node->position_flags |= QUADTREE_NODE_DIRTY;
-			--entity->in_nodes_minus_one;
+			--entity->in_nodes;
 
 			*node_entity_next = free_node_entity;
 			free_node_entity = node_entity_idx;
@@ -545,7 +545,7 @@ quadtree_normalize(
 			while(node_info != node_infos);
 
 			assert_neq(in_nodes, 0);
-			entity->in_nodes_minus_one = in_nodes - 1;
+			entity->in_nodes = in_nodes;
 
 			++reinsertion;
 		}
@@ -623,7 +623,7 @@ quadtree_normalize(
 			while(node_info != node_infos);
 
 			entity->next = 0;
-			entity->in_nodes_minus_one = UINT32_MAX;
+			entity->in_nodes = 0;
 			--qt->live_entities;
 
 			++removal;
@@ -749,7 +749,7 @@ quadtree_normalize(
 			while(node_info != node_infos);
 
 			assert_neq(in_nodes, 0);
-			entity->in_nodes_minus_one = in_nodes - 1;
+			entity->in_nodes = in_nodes;
 
 			++insertion;
 		}
@@ -910,7 +910,7 @@ quadtree_normalize(
 							uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
 							bool is_duplicate = false;
 
-							if(entity->in_nodes_minus_one)
+							if(entity->in_nodes > 1)
 							{
 								for(uint32_t j = 0; j < merge_count; ++j)
 								{
@@ -940,10 +940,10 @@ quadtree_normalize(
 								node_entities.next[node_entity_idx] = free_node_entity;
 								free_node_entity = node_entity_idx;
 
-								--entity->in_nodes_minus_one;
+								--entity->in_nodes;
 								if(reorder && entity_map[entity_idx])
 								{
-									new_entities[entity_map[entity_idx]].in_nodes_minus_one = entity->in_nodes_minus_one;
+									new_entities[entity_map[entity_idx]].in_nodes = entity->in_nodes;
 								}
 							}
 
@@ -1065,10 +1065,10 @@ quadtree_normalize(
 						}
 					}
 
-					entity->in_nodes_minus_one += current_target_node_idx - target_node_idxs - 1;
+					entity->in_nodes += current_target_node_idx - target_node_idxs - 1;
 					if(reorder && entity_map[entity_idx])
 					{
-						new_entities[entity_map[entity_idx]].in_nodes_minus_one = entity->in_nodes_minus_one;
+						new_entities[entity_map[entity_idx]].in_nodes = entity->in_nodes;
 					}
 
 					for(uint32_t* target_node_idx = target_node_idxs; target_node_idx != current_target_node_idx; ++target_node_idx)
@@ -1379,7 +1379,7 @@ quadtree_normalize(
 
 			for(uint32_t i = new_entities_used; i < new_entities_size; ++i)
 			{
-				new_entities[i].in_nodes_minus_one = UINT32_MAX;
+				new_entities[i].in_nodes = 0;
 			}
 
 			qt->region_size = new_region_size;
@@ -1514,7 +1514,7 @@ quadtree_update(
 
 			if(forward)
 			{
-				if(entity->in_nodes_minus_one == UINT32_MAX)
+				if(!entity->in_nodes)
 				{
 					entity_idx = entity->next;
 					node_entities->index = entity_idx;
@@ -1530,7 +1530,7 @@ quadtree_update(
 						entities[new_entity_idx] = *entity;
 						data[new_entity_idx] = data[entity_idx];
 
-						entity->in_nodes_minus_one = UINT32_MAX;
+						entity->in_nodes = 0;
 						entity->next = new_entity_idx;
 
 						node_entities->index = new_entity_idx;
@@ -1642,7 +1642,7 @@ quadtree_update(
 		{
 			quadtree_entity_t* entity = entities + reinsertion->entity_idx;
 
-			if(entity->in_nodes_minus_one == UINT32_MAX)
+			if(!entity->in_nodes)
 			{
 				reinsertion->entity_idx = entity->next;
 			}
@@ -1659,7 +1659,7 @@ quadtree_update(
 		{
 			quadtree_entity_t* entity = entities + node_removal->entity_idx;
 
-			if(entity->in_nodes_minus_one == UINT32_MAX)
+			if(!entity->in_nodes)
 			{
 				node_removal->entity_idx = entity->next;
 			}
@@ -1676,7 +1676,7 @@ quadtree_update(
 		{
 			quadtree_entity_t* entity = entities + removal->entity_idx;
 
-			if(entity->in_nodes_minus_one == UINT32_MAX)
+			if(!entity->in_nodes)
 			{
 				removal->entity_idx = entity->next;
 			}
@@ -2062,7 +2062,7 @@ quadtree_collide_pair(
 	quadtree_entity_t* other_entity = state->entities + other_entity_idx;
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	if(entity->in_nodes_minus_one || other_entity->in_nodes_minus_one)
+	if(entity->in_nodes > 1 || other_entity->in_nodes > 1)
 	{
 		uint32_t index_a = entity_idx;
 		uint32_t index_b = other_entity_idx;
@@ -3015,7 +3015,7 @@ quadtree_check_in_nodes_count(
 
 	while(entity < entity_end)
 	{
-		if(entity->in_nodes_minus_one == UINT32_MAX)
+		if(!entity->in_nodes)
 		{
 			++entity;
 			continue;
@@ -3024,7 +3024,7 @@ quadtree_check_in_nodes_count(
 		uint32_t check_count = 0;
 		quadtree_query_nodes_rect(qt, entity->extent, quadtree_check_count_node, &check_count);
 
-		hard_assert_eq(check_count - 1, entity->in_nodes_minus_one);
+		hard_assert_eq(check_count, entity->in_nodes);
 
 		++entity;
 	}

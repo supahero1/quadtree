@@ -100,7 +100,7 @@ typedef struct quadtree_entity
 		uint32_t next;
 	};
 
-	uint32_t in_nodes_minus_one;
+	uint32_t in_nodes;
 	uint32_t query_tick;
 	uint8_t update_tick;
 	uint8_t reinsertion_tick;
