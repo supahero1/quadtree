@@ -335,6 +335,575 @@ quadtree_region_end(
 }
 
 
+attr_noinline void
+quadtree_normalize_rebuild(
+	quadtree_t* qt,
+	quadtree_node_t* nodes,
+	quadtree_node_entities_t node_entities,
+	quadtree_entity_t* entities,
+	quadtree_entity_data* data,
+	uint32_t free_node_entity,
+	uint32_t node_entities_used,
+	uint32_t node_entities_size,
+	uint32_t entities_used,
+	uint32_t entities_size
+	)
+{
+	bool reorder = qt->force_reorder;
+	qt->force_reorder = false;
+
+	uint32_t free_node = 0;
+	uint32_t nodes_used = qt->nodes_used;
+	uint32_t nodes_size = qt->nodes_size;
+
+	quadtree_node_t* new_nodes;
+	quadtree_node_entities_t new_node_entities;
+	quadtree_entity_t* new_entities;
+	quadtree_entity_data* new_data;
+
+	uint32_t new_nodes_used = 0;
+	uint32_t new_nodes_size = nodes_size;
+
+	uint32_t new_node_entities_used = 1;
+	uint32_t new_node_entities_size = node_entities_size;
+
+	uint32_t new_entities_used = 1;
+	uint32_t new_region_size = qt->live_entities + (qt->live_entities >> 2) + 256;
+	uint32_t new_entities_size = 1 + new_region_size * 2;
+
+	new_nodes = alloc_malloc(new_nodes, new_nodes_size);
+	assert_ptr(new_nodes, new_nodes_size);
+
+	new_node_entities.next = alloc_malloc(new_node_entities.next, new_node_entities_size);
+	assert_ptr(new_node_entities.next, new_node_entities_size);
+
+	new_node_entities.entities = alloc_malloc(new_node_entities.entities, new_node_entities_size);
+	assert_ptr(new_node_entities.entities, new_node_entities_size);
+
+	new_node_entities.flags = alloc_malloc(new_node_entities.flags, new_node_entities_size);
+	assert_ptr(new_node_entities.flags, new_node_entities_size);
+
+	uint32_t* entity_map = NULL;
+
+	if(reorder)
+	{
+		new_entities = alloc_malloc(new_entities, new_entities_size);
+		assert_ptr(new_entities, new_entities_size);
+
+		new_data = alloc_malloc(new_data, new_entities_size);
+		assert_ptr(new_data, new_entities_size);
+
+		entity_map = alloc_calloc(entity_map, entities_size);
+		assert_ptr(entity_map, entities_size);
+	}
+	else
+	{
+		new_entities = entities;
+		new_data = data;
+		new_entities_used = entities_used;
+		new_entities_size = entities_size;
+	}
+
+
+	typedef struct quadtree_node_reorder_info
+	{
+		uint32_t node_idx;
+		rect_extent_t extent;
+		uint32_t parent_node_idx;
+		uint32_t head_idx;
+		uint32_t depth;
+	}
+	quadtree_node_reorder_info_t;
+
+	quadtree_node_reorder_info_t node_infos[qt->dfs_length];
+	quadtree_node_reorder_info_t* node_info = node_infos;
+
+	*(node_info++) =
+	(quadtree_node_reorder_info_t)
+	{
+		.node_idx = 0,
+		.extent = qt->rect_extent,
+		.parent_node_idx = 0,
+		.head_idx = 0,
+		.depth = 1
+	};
+
+	do
+	{
+		quadtree_node_reorder_info_t info = *(--node_info);
+		quadtree_node_t* node = nodes + info.node_idx;
+
+		uint32_t new_node_idx = new_nodes_used++;
+		quadtree_node_t* new_node = new_nodes + new_node_idx;
+
+		new_nodes[info.parent_node_idx].heads[info.head_idx] = new_node_idx;
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			uint32_t total = 0;
+			bool possible = true;
+
+			for(uint32_t i = 0; i < 4; ++i)
+			{
+				uint32_t node_idx = node->heads[i];
+				quadtree_node_t* node = nodes + node_idx;
+
+				if(node->type != QUADTREE_NODE_TYPE_LEAF)
+				{
+					possible = false;
+					break;
+				}
+
+				total += node->count;
+			}
+
+			if(possible && total <= qt->merge_threshold)
+			{
+				uint32_t heads[4];
+				memcpy(heads, node->heads, sizeof(heads));
+
+				quadtree_node_t* children[4];
+				for(uint32_t i = 0; i < 4; ++i)
+				{
+					children[i] = nodes + heads[i];
+				}
+
+				node->head = 0;
+				node->position_flags = 0;
+				node->count = 0;
+				node->type = QUADTREE_NODE_TYPE_LEAF;
+
+				rect_extent_t node_extent = info.extent;
+
+				uint32_t merge_indexes[qt->merge_threshold];
+				uint32_t merge_count = 0;
+
+				for(uint32_t i = 0; i < 4; ++i)
+				{
+					uint32_t child_idx = heads[i];
+					quadtree_node_t* child = children[i];
+
+					node->position_flags |= child->position_flags;
+
+					uint32_t node_entity_idx = child->head;
+					while(node_entity_idx)
+					{
+						uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
+						quadtree_entity_t* entity = entities + entity_idx;
+
+						uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
+						bool is_duplicate = false;
+
+						if(entity->in_nodes > 1)
+						{
+							for(uint32_t j = 0; j < merge_count; ++j)
+							{
+								if(merge_indexes[j] == entity_idx)
+								{
+									is_duplicate = true;
+									break;
+								}
+							}
+						}
+
+						if(!is_duplicate)
+						{
+							merge_indexes[merge_count++] = entity_idx;
+
+							node_entities.next[node_entity_idx] = node->head;
+							node_entities.entities[node_entity_idx].is_last = !node->head;
+							node->head = node_entity_idx;
+
+							quadtree_reset_flags();
+
+							++node->count;
+							node->position_flags |= QUADTREE_NODE_DIRTY;
+						}
+						else
+						{
+							node_entities.next[node_entity_idx] = free_node_entity;
+							free_node_entity = node_entity_idx;
+
+							--entity->in_nodes;
+							if(reorder && entity_map[entity_idx])
+							{
+								new_entities[entity_map[entity_idx]].in_nodes = entity->in_nodes;
+							}
+						}
+
+						node_entity_idx = next_node_entity_idx;
+					}
+
+					child->next = free_node;
+					free_node = child_idx;
+				}
+
+				qt->normalization |= QUADTREE_NOT_NORMALIZED_SOFT;
+			}
+		}
+		else if(
+			node->count >= qt->split_threshold &&
+			(info.extent.max_x - info.extent.min_x) * 0.5f >= qt->min_size &&
+			(info.extent.max_y - info.extent.min_y) * 0.5f >= qt->min_size &&
+			info.depth < qt->max_depth
+			)
+		{
+			uint32_t child_idxs[4];
+			for(uint32_t i = 0; i < 4; ++i)
+			{
+				uint32_t child_idx;
+
+				if(free_node)
+				{
+					child_idx = free_node;
+					free_node = nodes[child_idx].next;
+				}
+				else
+				{
+					if(nodes_used >= nodes_size)
+					{
+						uint32_t new_size = (nodes_used << 1) | 3;
+						assert_neq(new_size, nodes_size);
+
+						nodes = alloc_remalloc(nodes, nodes_size, new_size);
+						assert_not_null(nodes);
+
+						nodes_size = new_size;
+
+						node = nodes + info.node_idx;
+
+
+						if(new_size > new_nodes_size)
+						{
+							new_nodes = alloc_remalloc(new_nodes, new_nodes_size, new_size);
+							assert_not_null(new_nodes);
+
+							new_nodes_size = new_size;
+
+							new_node = new_nodes + new_node_idx;
+						}
+					}
+
+					child_idx = nodes_used++;
+				}
+
+				child_idxs[i] = child_idx;
+			}
+
+			quadtree_node_t* children[4];
+			uint32_t head = node->head;
+			uint32_t position_flags = node->position_flags;
+
+			for(uint32_t i = 0; i < 4; ++i)
+			{
+				uint32_t child_idx = child_idxs[i];
+				quadtree_node_t* child = nodes + child_idx;
+				children[i] = child;
+
+				node->heads[i] = child_idx;
+
+				child->head = 0;
+				child->count = 0;
+				child->type = QUADTREE_NODE_TYPE_LEAF;
+
+				static const uint32_t position_flags_mask[4] =
+				{
+					0b0011,
+					0b1001,
+					0b0110,
+					0b1100
+				};
+
+				child->position_flags = (position_flags & position_flags_mask[i]) | QUADTREE_NODE_DIRTY;
+			}
+
+			float center_x = (info.extent.min_x + info.extent.max_x) * 0.5f;
+			float center_y = (info.extent.min_y + info.extent.max_y) * 0.5f;
+
+			uint32_t node_entity_idx = head;
+			while(node_entity_idx)
+			{
+				uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
+				quadtree_entity_t* entity = entities + entity_idx;
+
+				uint32_t target_node_idxs[4];
+				uint32_t* current_target_node_idx = target_node_idxs;
+
+				if(entity->extent.min_x <= center_x)
+				{
+					if(entity->extent.min_y <= center_y)
+					{
+						*(current_target_node_idx++) = 0;
+					}
+					if(entity->extent.max_y >= center_y)
+					{
+						*(current_target_node_idx++) = 1;
+					}
+				}
+				if(entity->extent.max_x >= center_x)
+				{
+					if(entity->extent.min_y <= center_y)
+					{
+						*(current_target_node_idx++) = 2;
+					}
+					if(entity->extent.max_y >= center_y)
+					{
+						*(current_target_node_idx++) = 3;
+					}
+				}
+
+				entity->in_nodes += current_target_node_idx - target_node_idxs - 1;
+				if(reorder && entity_map[entity_idx])
+				{
+					new_entities[entity_map[entity_idx]].in_nodes = entity->in_nodes;
+				}
+
+				for(uint32_t* target_node_idx = target_node_idxs; target_node_idx != current_target_node_idx; ++target_node_idx)
+				{
+					quadtree_node_t* target_node = children[*target_node_idx];
+
+					uint32_t new_node_entity_idx;
+
+					if(free_node_entity)
+					{
+						new_node_entity_idx = free_node_entity;
+						free_node_entity = node_entities.next[new_node_entity_idx];
+					}
+					else
+					{
+						if(node_entities_used >= node_entities_size)
+						{
+							uint32_t new_size = (node_entities_used << 1) | 3;
+							assert_neq(new_size, node_entities_size);
+
+							node_entities.next = alloc_remalloc(node_entities.next, node_entities_size, new_size);
+							assert_not_null(node_entities.next);
+
+							node_entities.entities = alloc_remalloc(node_entities.entities, node_entities_size, new_size);
+							assert_not_null(node_entities.entities);
+
+							node_entities.flags = alloc_remalloc(node_entities.flags, node_entities_size, new_size);
+							assert_not_null(node_entities.flags);
+
+							node_entities_size = new_size;
+
+							if(new_size > new_node_entities_size)
+							{
+								new_node_entities.next = alloc_remalloc(new_node_entities.next, new_node_entities_size, new_size);
+								assert_not_null(new_node_entities.next);
+
+								new_node_entities.entities = alloc_remalloc(new_node_entities.entities, new_node_entities_size, new_size);
+								assert_not_null(new_node_entities.entities);
+
+								new_node_entities.flags = alloc_remalloc(new_node_entities.flags, new_node_entities_size, new_size);
+								assert_not_null(new_node_entities.flags);
+
+								new_node_entities_size = new_size;
+							}
+						}
+
+						new_node_entity_idx = node_entities_used++;
+					}
+
+					node_entities.next[new_node_entity_idx] = target_node->head;
+					node_entities.entities[new_node_entity_idx].is_last = !target_node->head;
+					node_entities.entities[new_node_entity_idx].index = entity_idx;
+					node_entities.flags[new_node_entity_idx] = node_entities.flags[node_entity_idx];
+					target_node->head = new_node_entity_idx;
+
+					++target_node->count;
+				}
+
+				uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
+
+				node_entities.next[node_entity_idx] = free_node_entity;
+				free_node_entity = node_entity_idx;
+
+				node_entity_idx = next_node_entity_idx;
+			}
+		}
+
+		if(node->type != QUADTREE_NODE_TYPE_LEAF)
+		{
+			float center_x = (info.extent.min_x + info.extent.max_x) * 0.5f;
+			float center_y = (info.extent.min_y + info.extent.max_y) * 0.5f;
+			uint32_t next_depth = info.depth + 1;
+
+			*(node_info++) =
+			(quadtree_node_reorder_info_t)
+			{
+				.node_idx = node->heads[0],
+				.extent = quadtree_child_extent(info.extent, center_x, center_y, 0),
+				.parent_node_idx = new_node_idx,
+				.head_idx = 0,
+				.depth = next_depth
+			};
+
+			*(node_info++) =
+			(quadtree_node_reorder_info_t)
+			{
+				.node_idx = node->heads[1],
+				.extent = quadtree_child_extent(info.extent, center_x, center_y, 1),
+				.parent_node_idx = new_node_idx,
+				.head_idx = 1,
+				.depth = next_depth
+			};
+
+			*(node_info++) =
+			(quadtree_node_reorder_info_t)
+			{
+				.node_idx = node->heads[2],
+				.extent = quadtree_child_extent(info.extent, center_x, center_y, 2),
+				.parent_node_idx = new_node_idx,
+				.head_idx = 2,
+				.depth = next_depth
+			};
+
+			*(node_info++) =
+			(quadtree_node_reorder_info_t)
+			{
+				.node_idx = node->heads[3],
+				.extent = quadtree_child_extent(info.extent, center_x, center_y, 3),
+				.parent_node_idx = new_node_idx,
+				.head_idx = 3,
+				.depth = next_depth
+			};
+		}
+		else
+		{
+			new_node->position_flags = node->position_flags & ~QUADTREE_NODE_DIRTY;
+			new_node->type = QUADTREE_NODE_TYPE_LEAF;
+
+			if(!node->head)
+			{
+				new_node->head = 0;
+				new_node->count = 0;
+
+				continue;
+			}
+
+			uint32_t node_entity_idx = node->head;
+
+			new_node->head = new_node_entities_used;
+			new_node->count = node->count;
+
+			if(!reorder && !(node->position_flags & QUADTREE_NODE_DIRTY))
+			{
+				memcpy(new_node_entities.entities + new_node_entities_used, node_entities.entities + node_entity_idx,
+					sizeof(*new_node_entities.entities) * node->count);
+				memcpy(new_node_entities.flags + new_node_entities_used, node_entities.flags + node_entity_idx,
+					sizeof(*new_node_entities.flags) * node->count);
+
+				for(uint32_t idx_in_leaf = 0; idx_in_leaf < node->count; ++idx_in_leaf)
+				{
+					new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
+					++new_node_entities_used;
+				}
+
+				new_node_entities.next[new_node_entities_used - 1] = 0;
+			}
+			else
+			{
+				while(1)
+				{
+					uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
+
+					if(reorder && !entity_map[entity_idx])
+					{
+						uint32_t new_entity_idx = new_entities_used++;
+						entity_map[entity_idx] = new_entity_idx;
+						new_entities[new_entity_idx] = entities[entity_idx];
+						new_data[new_entity_idx] = data[entity_idx];
+					}
+
+					uint32_t new_entity_idx = reorder ? entity_map[entity_idx] : entity_idx;
+					new_node_entities.entities[new_node_entities_used].index = new_entity_idx;
+					new_node_entities.flags[new_node_entities_used] = node_entities.flags[node_entity_idx];
+
+					if(node_entities.next[node_entity_idx])
+					{
+						node_entity_idx = node_entities.next[node_entity_idx];
+						new_node_entities.entities[new_node_entities_used].is_last = false;
+						new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
+						++new_node_entities_used;
+					}
+					else
+					{
+						new_node_entities.entities[new_node_entities_used].is_last = true;
+						new_node_entities.next[new_node_entities_used] = 0;
+						++new_node_entities_used;
+						break;
+					}
+				}
+			}
+		}
+	}
+	while(node_info != node_infos);
+
+	if(new_nodes_size >> 2 >= new_nodes_used)
+	{
+		uint32_t new_size = new_nodes_size >> 1;
+
+		new_nodes = alloc_remalloc(new_nodes, new_nodes_size, new_size);
+		assert_not_null(new_nodes);
+
+		new_nodes_size = new_size;
+	}
+
+	if(new_node_entities_size >> 2 >= new_node_entities_used)
+	{
+		uint32_t new_size = new_node_entities_size >> 1;
+
+		new_node_entities.next = alloc_remalloc(new_node_entities.next, new_node_entities_size, new_size);
+		assert_not_null(new_node_entities.next);
+
+		new_node_entities.entities = alloc_remalloc(new_node_entities.entities, new_node_entities_size, new_size);
+		assert_not_null(new_node_entities.entities);
+
+		new_node_entities.flags = alloc_remalloc(new_node_entities.flags, new_node_entities_size, new_size);
+		assert_not_null(new_node_entities.flags);
+
+		new_node_entities_size = new_size;
+	}
+
+	alloc_free(nodes, nodes_size);
+	qt->nodes = new_nodes;
+	qt->nodes_used = new_nodes_used;
+	qt->nodes_size = new_nodes_size;
+
+	alloc_free(node_entities.next, node_entities_size);
+	alloc_free(node_entities.entities, node_entities_size);
+	alloc_free(node_entities.flags, node_entities_size);
+	qt->node_entities = new_node_entities;
+	qt->node_entities_used = new_node_entities_used;
+	qt->node_entities_size = new_node_entities_size;
+
+
+	if(reorder)
+	{
+		alloc_free(entities, entities_size);
+		alloc_free(data, entities_size);
+		alloc_free(entity_map, entities_size);
+
+		for(uint32_t i = new_entities_used; i < new_entities_size; ++i)
+		{
+			new_entities[i].in_nodes = 0;
+		}
+
+		qt->region_size = new_region_size;
+		qt->region_cursor[0] = new_entities_used;
+		qt->region_cursor[1] = quadtree_region_base(qt, 1);
+		qt->home_region = 0;
+		qt->migrate_position = 0;
+	}
+
+	qt->entities = new_entities;
+	qt->entities_used = new_entities_used;
+	qt->entities_size = new_entities_size;
+	qt->data = new_data;
+}
+
+
 void
 quadtree_normalize(
 	quadtree_t* qt
@@ -735,561 +1304,8 @@ quadtree_normalize(
 		qt->insertions_size = 0;
 	}
 
-
-	{
-		bool reorder = qt->force_reorder;
-		qt->force_reorder = false;
-
-		uint32_t free_node = 0;
-		uint32_t nodes_used = qt->nodes_used;
-		uint32_t nodes_size = qt->nodes_size;
-
-		quadtree_node_t* new_nodes;
-		quadtree_node_entities_t new_node_entities;
-		quadtree_entity_t* new_entities;
-		quadtree_entity_data* new_data;
-
-		uint32_t new_nodes_used = 0;
-		uint32_t new_nodes_size = nodes_size;
-
-		uint32_t new_node_entities_used = 1;
-		uint32_t new_node_entities_size = node_entities_size;
-
-		uint32_t new_entities_used = 1;
-		uint32_t new_region_size = qt->live_entities + (qt->live_entities >> 2) + 256;
-		uint32_t new_entities_size = 1 + new_region_size * 2;
-
-		new_nodes = alloc_malloc(new_nodes, new_nodes_size);
-		assert_ptr(new_nodes, new_nodes_size);
-
-		new_node_entities.next = alloc_malloc(new_node_entities.next, new_node_entities_size);
-		assert_ptr(new_node_entities.next, new_node_entities_size);
-
-		new_node_entities.entities = alloc_malloc(new_node_entities.entities, new_node_entities_size);
-		assert_ptr(new_node_entities.entities, new_node_entities_size);
-
-		new_node_entities.flags = alloc_malloc(new_node_entities.flags, new_node_entities_size);
-		assert_ptr(new_node_entities.flags, new_node_entities_size);
-
-		uint32_t* entity_map = NULL;
-
-		if(reorder)
-		{
-			new_entities = alloc_malloc(new_entities, new_entities_size);
-			assert_ptr(new_entities, new_entities_size);
-
-			new_data = alloc_malloc(new_data, new_entities_size);
-			assert_ptr(new_data, new_entities_size);
-
-			entity_map = alloc_calloc(entity_map, entities_size);
-			assert_ptr(entity_map, entities_size);
-		}
-		else
-		{
-			new_entities = entities;
-			new_data = data;
-			new_entities_used = entities_used;
-			new_entities_size = entities_size;
-		}
-
-
-		typedef struct quadtree_node_reorder_info
-		{
-			uint32_t node_idx;
-			rect_extent_t extent;
-			uint32_t parent_node_idx;
-			uint32_t head_idx;
-			uint32_t depth;
-		}
-		quadtree_node_reorder_info_t;
-
-		quadtree_node_reorder_info_t node_infos[qt->dfs_length];
-		quadtree_node_reorder_info_t* node_info = node_infos;
-
-		*(node_info++) =
-		(quadtree_node_reorder_info_t)
-		{
-			.node_idx = 0,
-			.extent = qt->rect_extent,
-			.parent_node_idx = 0,
-			.head_idx = 0,
-			.depth = 1
-		};
-
-		do
-		{
-			quadtree_node_reorder_info_t info = *(--node_info);
-			quadtree_node_t* node = nodes + info.node_idx;
-
-			uint32_t new_node_idx = new_nodes_used++;
-			quadtree_node_t* new_node = new_nodes + new_node_idx;
-
-			new_nodes[info.parent_node_idx].heads[info.head_idx] = new_node_idx;
-
-			if(node->type != QUADTREE_NODE_TYPE_LEAF)
-			{
-				uint32_t total = 0;
-				bool possible = true;
-
-				for(uint32_t i = 0; i < 4; ++i)
-				{
-					uint32_t node_idx = node->heads[i];
-					quadtree_node_t* node = nodes + node_idx;
-
-					if(node->type != QUADTREE_NODE_TYPE_LEAF)
-					{
-						possible = false;
-						break;
-					}
-
-					total += node->count;
-				}
-
-				if(possible && total <= qt->merge_threshold)
-				{
-					uint32_t heads[4];
-					memcpy(heads, node->heads, sizeof(heads));
-
-					quadtree_node_t* children[4];
-					for(uint32_t i = 0; i < 4; ++i)
-					{
-						children[i] = nodes + heads[i];
-					}
-
-					node->head = 0;
-					node->position_flags = 0;
-					node->count = 0;
-					node->type = QUADTREE_NODE_TYPE_LEAF;
-
-					rect_extent_t node_extent = info.extent;
-
-					uint32_t merge_indexes[qt->merge_threshold];
-					uint32_t merge_count = 0;
-
-					for(uint32_t i = 0; i < 4; ++i)
-					{
-						uint32_t child_idx = heads[i];
-						quadtree_node_t* child = children[i];
-
-						node->position_flags |= child->position_flags;
-
-						uint32_t node_entity_idx = child->head;
-						while(node_entity_idx)
-						{
-							uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
-							quadtree_entity_t* entity = entities + entity_idx;
-
-							uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
-							bool is_duplicate = false;
-
-							if(entity->in_nodes > 1)
-							{
-								for(uint32_t j = 0; j < merge_count; ++j)
-								{
-									if(merge_indexes[j] == entity_idx)
-									{
-										is_duplicate = true;
-										break;
-									}
-								}
-							}
-
-							if(!is_duplicate)
-							{
-								merge_indexes[merge_count++] = entity_idx;
-
-								node_entities.next[node_entity_idx] = node->head;
-								node_entities.entities[node_entity_idx].is_last = !node->head;
-								node->head = node_entity_idx;
-
-								quadtree_reset_flags();
-
-								++node->count;
-								node->position_flags |= QUADTREE_NODE_DIRTY;
-							}
-							else
-							{
-								node_entities.next[node_entity_idx] = free_node_entity;
-								free_node_entity = node_entity_idx;
-
-								--entity->in_nodes;
-								if(reorder && entity_map[entity_idx])
-								{
-									new_entities[entity_map[entity_idx]].in_nodes = entity->in_nodes;
-								}
-							}
-
-							node_entity_idx = next_node_entity_idx;
-						}
-
-						child->next = free_node;
-						free_node = child_idx;
-					}
-
-					qt->normalization |= QUADTREE_NOT_NORMALIZED_SOFT;
-				}
-			}
-			else if(
-				node->count >= qt->split_threshold &&
-				(info.extent.max_x - info.extent.min_x) * 0.5f >= qt->min_size &&
-				(info.extent.max_y - info.extent.min_y) * 0.5f >= qt->min_size &&
-				info.depth < qt->max_depth
-				)
-			{
-				uint32_t child_idxs[4];
-				for(uint32_t i = 0; i < 4; ++i)
-				{
-					uint32_t child_idx;
-
-					if(free_node)
-					{
-						child_idx = free_node;
-						free_node = nodes[child_idx].next;
-					}
-					else
-					{
-						if(nodes_used >= nodes_size)
-						{
-							uint32_t new_size = (nodes_used << 1) | 3;
-							assert_neq(new_size, nodes_size);
-
-							nodes = alloc_remalloc(nodes, nodes_size, new_size);
-							assert_not_null(nodes);
-
-							nodes_size = new_size;
-
-							node = nodes + info.node_idx;
-
-
-							if(new_size > new_nodes_size)
-							{
-								new_nodes = alloc_remalloc(new_nodes, new_nodes_size, new_size);
-								assert_not_null(new_nodes);
-
-								new_nodes_size = new_size;
-
-								new_node = new_nodes + new_node_idx;
-							}
-						}
-
-						child_idx = nodes_used++;
-					}
-
-					child_idxs[i] = child_idx;
-				}
-
-				quadtree_node_t* children[4];
-				uint32_t head = node->head;
-				uint32_t position_flags = node->position_flags;
-
-				for(uint32_t i = 0; i < 4; ++i)
-				{
-					uint32_t child_idx = child_idxs[i];
-					quadtree_node_t* child = nodes + child_idx;
-					children[i] = child;
-
-					node->heads[i] = child_idx;
-
-					child->head = 0;
-					child->count = 0;
-					child->type = QUADTREE_NODE_TYPE_LEAF;
-
-					static const uint32_t position_flags_mask[4] =
-					{
-						0b0011,
-						0b1001,
-						0b0110,
-						0b1100
-					};
-
-					child->position_flags = (position_flags & position_flags_mask[i]) | QUADTREE_NODE_DIRTY;
-				}
-
-				float center_x = (info.extent.min_x + info.extent.max_x) * 0.5f;
-				float center_y = (info.extent.min_y + info.extent.max_y) * 0.5f;
-
-				uint32_t node_entity_idx = head;
-				while(node_entity_idx)
-				{
-					uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
-					quadtree_entity_t* entity = entities + entity_idx;
-
-					uint32_t target_node_idxs[4];
-					uint32_t* current_target_node_idx = target_node_idxs;
-
-					if(entity->extent.min_x <= center_x)
-					{
-						if(entity->extent.min_y <= center_y)
-						{
-							*(current_target_node_idx++) = 0;
-						}
-						if(entity->extent.max_y >= center_y)
-						{
-							*(current_target_node_idx++) = 1;
-						}
-					}
-					if(entity->extent.max_x >= center_x)
-					{
-						if(entity->extent.min_y <= center_y)
-						{
-							*(current_target_node_idx++) = 2;
-						}
-						if(entity->extent.max_y >= center_y)
-						{
-							*(current_target_node_idx++) = 3;
-						}
-					}
-
-					entity->in_nodes += current_target_node_idx - target_node_idxs - 1;
-					if(reorder && entity_map[entity_idx])
-					{
-						new_entities[entity_map[entity_idx]].in_nodes = entity->in_nodes;
-					}
-
-					for(uint32_t* target_node_idx = target_node_idxs; target_node_idx != current_target_node_idx; ++target_node_idx)
-					{
-						quadtree_node_t* target_node = children[*target_node_idx];
-
-						uint32_t new_node_entity_idx;
-
-						if(free_node_entity)
-						{
-							new_node_entity_idx = free_node_entity;
-							free_node_entity = node_entities.next[new_node_entity_idx];
-						}
-						else
-						{
-							if(node_entities_used >= node_entities_size)
-							{
-								uint32_t new_size = (node_entities_used << 1) | 3;
-								assert_neq(new_size, node_entities_size);
-
-								node_entities.next = alloc_remalloc(node_entities.next, node_entities_size, new_size);
-								assert_not_null(node_entities.next);
-
-								node_entities.entities = alloc_remalloc(node_entities.entities, node_entities_size, new_size);
-								assert_not_null(node_entities.entities);
-
-								node_entities.flags = alloc_remalloc(node_entities.flags, node_entities_size, new_size);
-								assert_not_null(node_entities.flags);
-
-								node_entities_size = new_size;
-
-								if(new_size > new_node_entities_size)
-								{
-									new_node_entities.next = alloc_remalloc(new_node_entities.next, new_node_entities_size, new_size);
-									assert_not_null(new_node_entities.next);
-
-									new_node_entities.entities = alloc_remalloc(new_node_entities.entities, new_node_entities_size, new_size);
-									assert_not_null(new_node_entities.entities);
-
-									new_node_entities.flags = alloc_remalloc(new_node_entities.flags, new_node_entities_size, new_size);
-									assert_not_null(new_node_entities.flags);
-
-									new_node_entities_size = new_size;
-								}
-							}
-
-							new_node_entity_idx = node_entities_used++;
-						}
-
-						node_entities.next[new_node_entity_idx] = target_node->head;
-						node_entities.entities[new_node_entity_idx].is_last = !target_node->head;
-						node_entities.entities[new_node_entity_idx].index = entity_idx;
-						node_entities.flags[new_node_entity_idx] = node_entities.flags[node_entity_idx];
-						target_node->head = new_node_entity_idx;
-
-						++target_node->count;
-					}
-
-					uint32_t next_node_entity_idx = node_entities.next[node_entity_idx];
-
-					node_entities.next[node_entity_idx] = free_node_entity;
-					free_node_entity = node_entity_idx;
-
-					node_entity_idx = next_node_entity_idx;
-				}
-			}
-
-			if(node->type != QUADTREE_NODE_TYPE_LEAF)
-			{
-				float center_x = (info.extent.min_x + info.extent.max_x) * 0.5f;
-				float center_y = (info.extent.min_y + info.extent.max_y) * 0.5f;
-				uint32_t next_depth = info.depth + 1;
-
-				*(node_info++) =
-				(quadtree_node_reorder_info_t)
-				{
-					.node_idx = node->heads[0],
-					.extent = quadtree_child_extent(info.extent, center_x, center_y, 0),
-					.parent_node_idx = new_node_idx,
-					.head_idx = 0,
-					.depth = next_depth
-				};
-
-				*(node_info++) =
-				(quadtree_node_reorder_info_t)
-				{
-					.node_idx = node->heads[1],
-					.extent = quadtree_child_extent(info.extent, center_x, center_y, 1),
-					.parent_node_idx = new_node_idx,
-					.head_idx = 1,
-					.depth = next_depth
-				};
-
-				*(node_info++) =
-				(quadtree_node_reorder_info_t)
-				{
-					.node_idx = node->heads[2],
-					.extent = quadtree_child_extent(info.extent, center_x, center_y, 2),
-					.parent_node_idx = new_node_idx,
-					.head_idx = 2,
-					.depth = next_depth
-				};
-
-				*(node_info++) =
-				(quadtree_node_reorder_info_t)
-				{
-					.node_idx = node->heads[3],
-					.extent = quadtree_child_extent(info.extent, center_x, center_y, 3),
-					.parent_node_idx = new_node_idx,
-					.head_idx = 3,
-					.depth = next_depth
-				};
-			}
-			else
-			{
-				new_node->position_flags = node->position_flags & ~QUADTREE_NODE_DIRTY;
-				new_node->type = QUADTREE_NODE_TYPE_LEAF;
-
-				if(!node->head)
-				{
-					new_node->head = 0;
-					new_node->count = 0;
-
-					continue;
-				}
-
-				uint32_t node_entity_idx = node->head;
-
-				new_node->head = new_node_entities_used;
-				new_node->count = node->count;
-
-				if(!reorder && !(node->position_flags & QUADTREE_NODE_DIRTY))
-				{
-					memcpy(new_node_entities.entities + new_node_entities_used, node_entities.entities + node_entity_idx,
-						sizeof(*new_node_entities.entities) * node->count);
-					memcpy(new_node_entities.flags + new_node_entities_used, node_entities.flags + node_entity_idx,
-						sizeof(*new_node_entities.flags) * node->count);
-
-					for(uint32_t idx_in_leaf = 0; idx_in_leaf < node->count; ++idx_in_leaf)
-					{
-						new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
-						++new_node_entities_used;
-					}
-
-					new_node_entities.next[new_node_entities_used - 1] = 0;
-				}
-				else
-				{
-					while(1)
-					{
-						uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
-
-						if(reorder && !entity_map[entity_idx])
-						{
-							uint32_t new_entity_idx = new_entities_used++;
-							entity_map[entity_idx] = new_entity_idx;
-							new_entities[new_entity_idx] = entities[entity_idx];
-							new_data[new_entity_idx] = data[entity_idx];
-						}
-
-						uint32_t new_entity_idx = reorder ? entity_map[entity_idx] : entity_idx;
-						new_node_entities.entities[new_node_entities_used].index = new_entity_idx;
-						new_node_entities.flags[new_node_entities_used] = node_entities.flags[node_entity_idx];
-
-						if(node_entities.next[node_entity_idx])
-						{
-							node_entity_idx = node_entities.next[node_entity_idx];
-							new_node_entities.entities[new_node_entities_used].is_last = false;
-							new_node_entities.next[new_node_entities_used] = new_node_entities_used + 1;
-							++new_node_entities_used;
-						}
-						else
-						{
-							new_node_entities.entities[new_node_entities_used].is_last = true;
-							new_node_entities.next[new_node_entities_used] = 0;
-							++new_node_entities_used;
-							break;
-						}
-					}
-				}
-			}
-		}
-		while(node_info != node_infos);
-
-		if(new_nodes_size >> 2 >= new_nodes_used)
-		{
-			uint32_t new_size = new_nodes_size >> 1;
-
-			new_nodes = alloc_remalloc(new_nodes, new_nodes_size, new_size);
-			assert_not_null(new_nodes);
-
-			new_nodes_size = new_size;
-		}
-
-		if(new_node_entities_size >> 2 >= new_node_entities_used)
-		{
-			uint32_t new_size = new_node_entities_size >> 1;
-
-			new_node_entities.next = alloc_remalloc(new_node_entities.next, new_node_entities_size, new_size);
-			assert_not_null(new_node_entities.next);
-
-			new_node_entities.entities = alloc_remalloc(new_node_entities.entities, new_node_entities_size, new_size);
-			assert_not_null(new_node_entities.entities);
-
-			new_node_entities.flags = alloc_remalloc(new_node_entities.flags, new_node_entities_size, new_size);
-			assert_not_null(new_node_entities.flags);
-
-			new_node_entities_size = new_size;
-		}
-
-		alloc_free(nodes, nodes_size);
-		qt->nodes = new_nodes;
-		qt->nodes_used = new_nodes_used;
-		qt->nodes_size = new_nodes_size;
-
-		alloc_free(node_entities.next, node_entities_size);
-		alloc_free(node_entities.entities, node_entities_size);
-		alloc_free(node_entities.flags, node_entities_size);
-		qt->node_entities = new_node_entities;
-		qt->node_entities_used = new_node_entities_used;
-		qt->node_entities_size = new_node_entities_size;
-
-
-		if(reorder)
-		{
-			alloc_free(entities, entities_size);
-			alloc_free(data, entities_size);
-			alloc_free(entity_map, entities_size);
-
-			for(uint32_t i = new_entities_used; i < new_entities_size; ++i)
-			{
-				new_entities[i].in_nodes = 0;
-			}
-
-			qt->region_size = new_region_size;
-			qt->region_cursor[0] = new_entities_used;
-			qt->region_cursor[1] = quadtree_region_base(qt, 1);
-			qt->home_region = 0;
-			qt->migrate_position = 0;
-		}
-
-		qt->entities = new_entities;
-		qt->entities_used = new_entities_used;
-		qt->entities_size = new_entities_size;
-		qt->data = new_data;
-	}
+	quadtree_normalize_rebuild(qt, nodes, node_entities, entities, data, free_node_entity,
+		node_entities_used, node_entities_size, entities_used, entities_size);
 }
 
 
