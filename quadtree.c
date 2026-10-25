@@ -494,14 +494,31 @@ quadtree_normalize(
 
 				++in_nodes;
 
-				while(node_entity_idx)
+				if(!(node->position_flags & QUADTREE_NODE_DIRTY))
 				{
-					if(node_entities.entities[node_entity_idx].index == entity_idx)
-					{
-						goto goto_skip;
-					}
+					uint32_t node_entity_end = node_entity_idx + node->count;
 
-					node_entity_idx = node_entities.next[node_entity_idx];
+					while(node_entity_idx != node_entity_end)
+					{
+						if(node_entities.entities[node_entity_idx].index == entity_idx)
+						{
+							goto goto_skip;
+						}
+
+						++node_entity_idx;
+					}
+				}
+				else
+				{
+					while(node_entity_idx)
+					{
+						if(node_entities.entities[node_entity_idx].index == entity_idx)
+						{
+							goto goto_skip;
+						}
+
+						node_entity_idx = node_entities.next[node_entity_idx];
+					}
 				}
 
 				if(free_node_entity)
