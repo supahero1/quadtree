@@ -27,13 +27,13 @@ entity_t;
 #include "heap.c"
 #include "quadtree.c"
 
-#define ITER UINT32_C(500000)
+#define ITER UINT32_C(1000000)
 #define RADIUS_ODDS 2000.0f
 #define RADIUS_MIN 16.0f
 #define RADIUS_MAX 2048.0f
 #define MIN_SIZE 16.0f
-#define ARENA_WIDTH 100000.0f
-#define ARENA_HEIGHT 100000.0f
+#define ARENA_WIDTH 200000.0f
+#define ARENA_HEIGHT 200000.0f
 #define MEASURE_TICKS 1000
 #define INITIAL_VELOCITY 0.7f
 #define BOUNDS_VELOCITY_LOSS 0.99f
@@ -454,13 +454,29 @@ tick(
 		printf("Normalize: %.02lfms\n", time_elapsed);
 		printf("Nodes: %u\n", qt.nodes_used);
 		printf("Node entities: %u\n", qt.node_entities_used);
-		printf("Entities: %u\n", qt.entities_used);
+		printf("Entities: %u\n", qt.live_entities);
 	}
 
 #if DO_THEM_QUERIES == 1
-	start = get_time();
-	for(int i = 1; i <= QUERIES_NUM; ++i)
+	static uint32_t query_entities[QUERIES_NUM];
+
+	for(int q = 0; q < QUERIES_NUM; ++q)
 	{
+		if(!query_entities[q])
+		{
+			query_entities[q] = q + 1;
+		}
+
+		while(!qt.entities[query_entities[q]].in_nodes)
+		{
+			query_entities[q] = qt.entities[query_entities[q]].next;
+		}
+	}
+
+	start = get_time();
+	for(int q = 0; q < QUERIES_NUM; ++q)
+	{
+		uint32_t i = query_entities[q];
 		rect_extent_t extent =
 		(rect_extent_t)
 		{
