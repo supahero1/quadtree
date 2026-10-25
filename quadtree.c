@@ -14,6 +14,7 @@
  *  limitations under the License.
  */
 
+#include "attr.h"
 #include "heap.h"
 #include "quadtree.h"
 #include "alloc/include/alloc/base.h"
@@ -357,7 +358,7 @@ quadtree_remove(
 }
 
 
-static inline uint32_t
+uint32_t
 quadtree_region_base(
 	const quadtree_t* qt,
 	uint32_t region
@@ -367,7 +368,7 @@ quadtree_region_base(
 }
 
 
-static inline uint32_t
+uint32_t
 quadtree_region_end(
 	const quadtree_t* qt,
 	uint32_t region
@@ -1997,7 +1998,7 @@ typedef struct quadtree_collide_state
 quadtree_collide_state_t;
 
 
-static void
+void
 quadtree_collide_pair(
 	quadtree_collide_state_t* state,
 	uint32_t entity_idx,
@@ -2086,7 +2087,7 @@ quadtree_collide_pair(
 }
 
 
-static void
+void
 quadtree_sort_leaf(
 	quadtree_node_entity_t* head_entity,
 	uint8_t* head_flags,
@@ -2119,7 +2120,7 @@ quadtree_sort_leaf(
 }
 
 
-static void
+void
 quadtree_collide_no_avx(
 	quadtree_collide_state_t* state
 	)
@@ -2178,7 +2179,7 @@ quadtree_collide_no_avx(
 
 #if defined(__x86_64__) || defined(__i386__)
 
-static __attribute__((noinline)) uint32_t
+attr_noinline uint32_t
 quadtree_sweep_insert(
 	float* min_x,
 	float* min_y,
@@ -2212,7 +2213,7 @@ quadtree_sweep_insert(
 }
 
 
-static void __attribute__((target("avx")))
+attr_target("avx") void
 quadtree_collide_avx(
 	quadtree_collide_state_t* state
 	)
