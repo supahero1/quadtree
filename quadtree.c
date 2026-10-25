@@ -37,7 +37,7 @@ quadtree_init(
 
 	if(!qt->split_threshold)
 	{
-		qt->split_threshold = 50;
+		qt->split_threshold = 128;
 	}
 
 	if(!qt->merge_threshold && !qt->merge_threshold_set)
