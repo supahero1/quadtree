@@ -116,7 +116,7 @@ quadtree_entity_t;
 typedef struct quadtree_node_info
 {
 	uint32_t node_idx;
-	half_extent_t extent;
+	rect_extent_t extent;
 }
 quadtree_node_info_t;
 
@@ -288,7 +288,6 @@ struct quadtree
 	bool merge_threshold_set;
 
 	rect_extent_t rect_extent;
-	half_extent_t half_extent;
 };
 
 

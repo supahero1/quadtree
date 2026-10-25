@@ -251,7 +251,7 @@ draw_node(
 	(void) qt;
 	(void) user_data;
 
-	rect_t rect = to_screen(half_to_rect_extent(info->extent));
+	rect_t rect = to_screen(info->extent);
 
 	for(int x = rect.min_x; x <= rect.max_x; ++x)
 	{
@@ -325,7 +325,7 @@ init(
 		"Initial count:    %d\n"
 		"Arena size:       %.01Lf x %.01Lf\n"
 		"Initial Radius:   From %.01f to %.01f\n"
-		, ITER, (long double) qt.half_extent.w * 2, (long double) qt.half_extent.h * 2, RADIUS_MIN, RADIUS_MAX
+		, ITER, (long double) (qt.rect_extent.max_x - qt.rect_extent.min_x), (long double) (qt.rect_extent.max_y - qt.rect_extent.min_y), RADIUS_MIN, RADIUS_MAX
 		);
 
 	entity_t* rands_data = alloc_malloc(rands_data, ITER);
@@ -351,8 +351,8 @@ init(
 		w = dim[0];
 		h = dim[1];
 
-		float qtw = qt.half_extent.w * 2.0f - w;
-		float qth = qt.half_extent.h * 2.0f - h;
+		float qtw = qt.rect_extent.max_x - qt.rect_extent.min_x - w;
+		float qth = qt.rect_extent.max_y - qt.rect_extent.min_y - h;
 
 		rands_extents[i].min_x = qt.rect_extent.min_x + qtw * randf();
 		rands_extents[i].max_x = rands_extents[i].min_x + w;
@@ -481,15 +481,6 @@ main()
 		.max_x =  ARENA_WIDTH * 0.5f,
 		.min_y = -ARENA_HEIGHT * 0.5f,
 		.max_y =  ARENA_HEIGHT * 0.5f
-	};
-
-	qt.half_extent =
-	(half_extent_t)
-	{
-		.x = 0,
-		.y = 0,
-		.w = ARENA_WIDTH * 0.5f,
-		.h = ARENA_HEIGHT * 0.5f
 	};
 
 	qt.min_size = MIN_SIZE;
