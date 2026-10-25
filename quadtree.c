@@ -22,6 +22,10 @@
 #include <math.h>
 #include <string.h>
 
+#if defined(__x86_64__) || defined(__i386__)
+	#include <immintrin.h>
+#endif
+
 
 void
 quadtree_init(
@@ -1785,43 +1789,127 @@ quadtree_query_nodes_circle(
 }
 
 
-void
-quadtree_collide(
-	quadtree_t* qt,
-	quadtree_collide_fn_t collide_fn,
-	void* user_data
-	)
+typedef struct quadtree_collide_state
 {
-	assert_not_null(qt);
-	assert_not_null(collide_fn);
+	quadtree_t* qt;
+	quadtree_collide_fn_t collide_fn;
+	void* user_data;
 
-	quadtree_normalize_hard(qt);
-
-	if(qt->entities_used <= 1)
-	{
-		return;
-	}
+	quadtree_entity_t* entities;
+	quadtree_entity_data* data;
 
 #if QUADTREE_DEDUPE_COLLISIONS == 1
-	uint32_t ht_size = MACRO_NEXT_OR_EQUAL_POWER_OF_2(MACRO_MAX(qt->ht_entries_used * 2, 1));
-	uint32_t ht_mask = ht_size - 1;
-	assert_true(MACRO_IS_POWER_OF_2(ht_size));
+	uint32_t* ht;
+	uint32_t ht_size;
+	uint32_t ht_mask;
 
-	uint32_t* ht = alloc_calloc(ht, ht_size);
-	assert_ptr(ht, ht_size);
+	quadtree_ht_entry_t* ht_entries;
+	uint32_t ht_entries_used;
+	uint32_t ht_entries_size;
+#endif
+}
+quadtree_collide_state_t;
 
-	quadtree_ht_entry_t* ht_entries = qt->ht_entries;
 
-	uint32_t ht_entries_used = 1;
-	uint32_t ht_entries_size = qt->ht_entries_size;
+static void
+quadtree_collide_pair(
+	quadtree_collide_state_t* state,
+	uint32_t entity_idx,
+	uint32_t other_entity_idx
+	)
+{
+	quadtree_entity_t* entity = state->entities + entity_idx;
+	quadtree_entity_t* other_entity = state->entities + other_entity_idx;
+
+#if QUADTREE_DEDUPE_COLLISIONS == 1
+	if(entity->in_nodes_minus_one || other_entity->in_nodes_minus_one)
+	{
+		uint32_t index_a = entity_idx;
+		uint32_t index_b = other_entity_idx;
+
+		if(index_a > index_b)
+		{
+			uint32_t temp = index_a;
+			index_a = index_b;
+			index_b = temp;
+		}
+
+		uint32_t hash = index_a * 48611 + index_b * 50261;
+		hash &= state->ht_mask;
+
+		uint32_t index = state->ht[hash];
+		quadtree_ht_entry_t* entry;
+
+		while(index)
+		{
+			entry = state->ht_entries + index;
+
+			if(entry->idx[0] == index_a && entry->idx[1] == index_b)
+			{
+				return;
+			}
+
+			index = entry->next;
+		}
+
+		if(state->ht_entries_used >= state->ht_entries_size)
+		{
+			uint32_t new_size = (state->ht_entries_used << 1) | 3;
+			assert_neq(new_size, state->ht_entries_size);
+
+			state->ht_entries = alloc_remalloc(state->ht_entries, state->ht_entries_size, new_size);
+			assert_not_null(state->ht_entries);
+
+			state->ht_entries_size = new_size;
+		}
+
+		uint32_t entry_idx = state->ht_entries_used++;
+		entry = state->ht_entries + entry_idx;
+
+		entry->idx[0] = index_a;
+		entry->idx[1] = index_b;
+		entry->next = state->ht[hash];
+		state->ht[hash] = entry_idx;
+
+		if(state->ht_entries_used > state->ht_size)
+		{
+			alloc_free(state->ht, state->ht_size);
+
+			state->ht_size <<= 1;
+			state->ht_mask = state->ht_size - 1;
+
+			state->ht = alloc_calloc(state->ht, state->ht_size);
+			assert_ptr(state->ht, state->ht_size);
+
+			for(uint32_t rehash_idx = 1; rehash_idx < state->ht_entries_used; ++rehash_idx)
+			{
+				quadtree_ht_entry_t* rehash_entry = state->ht_entries + rehash_idx;
+
+				uint32_t rehash = rehash_entry->idx[0] * 48611 + rehash_entry->idx[1] * 50261;
+				rehash &= state->ht_mask;
+
+				rehash_entry->next = state->ht[rehash];
+				state->ht[rehash] = rehash_idx;
+			}
+		}
+	}
 #endif
 
-	quadtree_node_entity_t* node_entities = qt->node_entities.entities;
-	quadtree_entity_t* entities = qt->entities;
-	quadtree_entity_data* data = qt->data;
+	state->collide_fn(state->qt, &entity->extent, state->data + entity_idx,
+		&other_entity->extent, state->data + other_entity_idx, state->user_data);
+}
+
+
+static void
+quadtree_collide_no_avx(
+	quadtree_collide_state_t* state
+	)
+{
+	quadtree_node_entity_t* node_entities = state->qt->node_entities.entities;
+	quadtree_entity_t* entities = state->entities;
 
 	quadtree_node_entity_t* node_entity = node_entities;
-	quadtree_node_entity_t* node_entities_end = node_entities + qt->node_entities_used - 1;
+	quadtree_node_entity_t* node_entities_end = node_entities + state->qt->node_entities_used - 1;
 
 	do
 	{
@@ -1853,104 +1941,219 @@ quadtree_collide(
 				continue;
 			}
 
-#if QUADTREE_DEDUPE_COLLISIONS == 1
-			if(entity->in_nodes_minus_one || other_entity->in_nodes_minus_one)
-			{
-				uint32_t index_a = entity_idx;
-				uint32_t index_b = other_entity_idx;
-
-				if(index_a > index_b)
-				{
-					uint32_t temp = index_a;
-					index_a = index_b;
-					index_b = temp;
-				}
-
-				uint32_t hash = index_a * 48611 + index_b * 50261;
-				hash &= ht_mask;
-
-				uint32_t index = ht[hash];
-				quadtree_ht_entry_t* entry;
-
-				while(index)
-				{
-					entry = ht_entries + index;
-
-					if(entry->idx[0] == index_a && entry->idx[1] == index_b)
-					{
-						goto goto_skip;
-					}
-
-					index = entry->next;
-				}
-
-				if(ht_entries_used >= ht_entries_size)
-				{
-					uint32_t new_size = (ht_entries_used << 1) | 3;
-					assert_neq(new_size, ht_entries_size);
-
-					ht_entries = alloc_remalloc(ht_entries, ht_entries_size, new_size);
-					assert_not_null(ht_entries);
-
-					ht_entries_size = new_size;
-				}
-
-				uint32_t entry_idx = ht_entries_used++;
-				entry = ht_entries + entry_idx;
-
-				entry->idx[0] = index_a;
-				entry->idx[1] = index_b;
-				entry->next = ht[hash];
-				ht[hash] = entry_idx;
-
-				if(ht_entries_used > ht_size)
-				{
-					alloc_free(ht, ht_size);
-
-					ht_size <<= 1;
-					ht_mask = ht_size - 1;
-
-					ht = alloc_calloc(ht, ht_size);
-					assert_ptr(ht, ht_size);
-
-					for(uint32_t rehash_idx = 1; rehash_idx < ht_entries_used; ++rehash_idx)
-					{
-						quadtree_ht_entry_t* rehash_entry = ht_entries + rehash_idx;
-
-						uint32_t rehash = rehash_entry->idx[0] * 48611 + rehash_entry->idx[1] * 50261;
-						rehash &= ht_mask;
-
-						rehash_entry->next = ht[rehash];
-						ht[rehash] = rehash_idx;
-					}
-				}
-			}
-#endif
-
-			collide_fn(qt, &entity->extent, data + entity_idx, &other_entity->extent, data + other_entity_idx, user_data);
-
-			goto_skip:;
+			quadtree_collide_pair(state, entity_idx, other_entity_idx);
 		}
 		while(!other_node_entity->is_last);
 	}
 	while(node_entity != node_entities_end);
+}
 
-#if QUADTREE_DEDUPE_COLLISIONS == 1
-	if(ht_entries_used * 4 <= ht_entries_size)
+
+#if defined(__x86_64__) || defined(__i386__)
+
+static void __attribute__((target("avx")))
+quadtree_collide_avx(
+	quadtree_collide_state_t* state
+	)
+{
+	quadtree_node_entity_t* node_entity = state->qt->node_entities.entities + 1;
+	quadtree_node_entity_t* node_entities_end = state->qt->node_entities.entities + state->qt->node_entities_used;
+	quadtree_entity_t* entities = state->entities;
+
+	uint32_t sweep_size = 256;
+
+	float* min_x = alloc_malloc(min_x, sweep_size);
+	assert_ptr(min_x, sweep_size);
+
+	float* min_y = alloc_malloc(min_y, sweep_size);
+	assert_ptr(min_y, sweep_size);
+
+	float* max_x = alloc_malloc(max_x, sweep_size);
+	assert_ptr(max_x, sweep_size);
+
+	float* max_y = alloc_malloc(max_y, sweep_size);
+	assert_ptr(max_y, sweep_size);
+
+	while(node_entity != node_entities_end)
 	{
-		uint32_t new_size = ht_entries_size >> 1;
+		uint32_t count = 0;
 
-		ht_entries = alloc_remalloc(ht_entries, ht_entries_size, new_size);
-		assert_not_null(ht_entries);
+		do
+		{
+			if(count + 8 >= sweep_size)
+			{
+				uint32_t new_size = sweep_size << 1;
 
-		ht_entries_size = new_size;
+				min_x = alloc_remalloc(min_x, sweep_size, new_size);
+				assert_not_null(min_x);
+
+				min_y = alloc_remalloc(min_y, sweep_size, new_size);
+				assert_not_null(min_y);
+
+				max_x = alloc_remalloc(max_x, sweep_size, new_size);
+				assert_not_null(max_x);
+
+				max_y = alloc_remalloc(max_y, sweep_size, new_size);
+				assert_not_null(max_y);
+
+				sweep_size = new_size;
+			}
+
+			rect_extent_t extent = entities[node_entity[count].index].extent;
+			min_x[count] = extent.min_x;
+			min_y[count] = extent.min_y;
+			max_x[count] = extent.max_x;
+			max_y[count] = extent.max_y;
+		}
+		while(!node_entity[count++].is_last);
+
+		for(uint32_t lane = 0; lane < 8; ++lane)
+		{
+			min_x[count + lane] = INFINITY;
+			min_y[count + lane] = INFINITY;
+			max_x[count + lane] = -INFINITY;
+			max_y[count + lane] = -INFINITY;
+		}
+
+		for(uint32_t i = 0; i + 1 < count; ++i)
+		{
+			uint32_t j = i + 1;
+
+			while(1)
+			{
+				__m256 in_window_mask = _mm256_cmp_ps(_mm256_loadu_ps(QUADTREE_SORT_BY_MEMBER_MIN + j),
+					_mm256_set1_ps(QUADTREE_SORT_BY_MEMBER_MAX[i]), _CMP_NGT_UQ);
+
+				__m256 intersects_mask = _mm256_and_ps(
+					_mm256_and_ps(
+						_mm256_cmp_ps(_mm256_set1_ps(max_x[i]), _mm256_loadu_ps(min_x + j), _CMP_GE_OQ),
+						_mm256_cmp_ps(_mm256_set1_ps(max_y[i]), _mm256_loadu_ps(min_y + j), _CMP_GE_OQ)
+						),
+					_mm256_and_ps(
+						_mm256_cmp_ps(_mm256_loadu_ps(max_x + j), _mm256_set1_ps(min_x[i]), _CMP_GE_OQ),
+						_mm256_cmp_ps(_mm256_loadu_ps(max_y + j), _mm256_set1_ps(min_y[i]), _CMP_GE_OQ)
+						)
+					);
+
+				uint32_t in_window = _mm256_movemask_ps(in_window_mask);
+				in_window &= ~(in_window + 1);
+
+				uint32_t hits = in_window & _mm256_movemask_ps(intersects_mask);
+				if(hits)
+				{
+					uint32_t k = j + __builtin_ctz(hits);
+
+					uint32_t entity_idx = node_entity[i].index;
+					uint32_t other_entity_idx = node_entity[k].index;
+
+					quadtree_collide_pair(state, entity_idx, other_entity_idx);
+
+					min_x[i] = entities[entity_idx].extent.min_x;
+					min_y[i] = entities[entity_idx].extent.min_y;
+					max_x[i] = entities[entity_idx].extent.max_x;
+					max_y[i] = entities[entity_idx].extent.max_y;
+
+					min_x[k] = entities[other_entity_idx].extent.min_x;
+					min_y[k] = entities[other_entity_idx].extent.min_y;
+					max_x[k] = entities[other_entity_idx].extent.max_x;
+					max_y[k] = entities[other_entity_idx].extent.max_y;
+
+					j = k + 1;
+					if(j >= count)
+					{
+						break;
+					}
+
+					continue;
+				}
+
+				if(in_window != 0xFF || j + 8 >= count)
+				{
+					break;
+				}
+
+				j += 8;
+			}
+		}
+
+		node_entity += count;
 	}
 
-	qt->ht_entries = ht_entries;
-	qt->ht_entries_used = ht_entries_used;
-	qt->ht_entries_size = ht_entries_size;
+	alloc_free(min_x, sweep_size);
+	alloc_free(min_y, sweep_size);
+	alloc_free(max_x, sweep_size);
+	alloc_free(max_y, sweep_size);
+}
 
-	alloc_free(ht, ht_size);
+#endif
+
+
+void
+quadtree_collide(
+	quadtree_t* qt,
+	quadtree_collide_fn_t collide_fn,
+	void* user_data
+	)
+{
+	assert_not_null(qt);
+	assert_not_null(collide_fn);
+
+	quadtree_normalize_hard(qt);
+
+	if(qt->entities_used <= 1)
+	{
+		return;
+	}
+
+	quadtree_collide_state_t state =
+	{
+		.qt = qt,
+		.collide_fn = collide_fn,
+		.user_data = user_data,
+		.entities = qt->entities,
+		.data = qt->data
+	};
+
+#if QUADTREE_DEDUPE_COLLISIONS == 1
+	state.ht_size = MACRO_NEXT_OR_EQUAL_POWER_OF_2(MACRO_MAX(qt->ht_entries_used * 2, 1));
+	state.ht_mask = state.ht_size - 1;
+	assert_true(MACRO_IS_POWER_OF_2(state.ht_size));
+
+	state.ht = alloc_calloc(state.ht, state.ht_size);
+	assert_ptr(state.ht, state.ht_size);
+
+	state.ht_entries = qt->ht_entries;
+	state.ht_entries_used = 1;
+	state.ht_entries_size = qt->ht_entries_size;
+#endif
+
+#if defined(__x86_64__) || defined(__i386__)
+	if(__builtin_cpu_supports("avx"))
+	{
+		quadtree_collide_avx(&state);
+	}
+	else
+#endif
+	{
+		quadtree_collide_no_avx(&state);
+	}
+
+#if QUADTREE_DEDUPE_COLLISIONS == 1
+	if(state.ht_entries_used * 4 <= state.ht_entries_size)
+	{
+		uint32_t new_size = state.ht_entries_size >> 1;
+
+		state.ht_entries = alloc_remalloc(state.ht_entries, state.ht_entries_size, new_size);
+		assert_not_null(state.ht_entries);
+
+		state.ht_entries_size = new_size;
+	}
+
+	qt->ht_entries = state.ht_entries;
+	qt->ht_entries_used = state.ht_entries_used;
+	qt->ht_entries_size = state.ht_entries_size;
+
+	alloc_free(state.ht, state.ht_size);
 #endif
 }
 
