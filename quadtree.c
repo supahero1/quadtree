@@ -2239,6 +2239,11 @@ quadtree_collide_avx(
 				sweep_size = new_size;
 			}
 
+			if(node_entity + count + QUADTREE_GATHER_PREFETCH < node_entities_end)
+			{
+				__builtin_prefetch(entities + node_entity[count + QUADTREE_GATHER_PREFETCH].index);
+			}
+
 			rect_extent_t extent = entities[node_entity[count].index].extent;
 			min_x[count] = extent.min_x;
 			min_y[count] = extent.min_y;
