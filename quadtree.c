@@ -1377,33 +1377,68 @@ quadtree_normalize_hard(
 }
 
 
-void
-quadtree_update(
-	quadtree_t* qt,
-	quadtree_update_fn_t update_fn,
-	void* user_data
+typedef uint32_t
+(*quadtree_update_flags_fn_t)(
+	const rect_extent_t* entity_extent,
+	const rect_extent_t* node_extent
+	);
+
+
+uint32_t
+quadtree_update_flags_scalar(
+	const rect_extent_t* entity_extent,
+	const rect_extent_t* node_extent
 	)
 {
-	assert_not_null(qt);
-	assert_not_null(update_fn);
+	uint32_t crossing =
+		((entity_extent->min_x <= node_extent->min_x) << 0) |
+		((entity_extent->min_y <= node_extent->min_y) << 1) |
+		((entity_extent->max_x >= node_extent->max_x) << 2) |
+		((entity_extent->max_y >= node_extent->max_y) << 3);
+	uint32_t outside =
+		((entity_extent->max_x < node_extent->min_x) << 0) |
+		((entity_extent->max_y < node_extent->min_y) << 1) |
+		((node_extent->max_x < entity_extent->min_x) << 2) |
+		((node_extent->max_y < entity_extent->min_y) << 3);
 
-	quadtree_normalize_hard(qt);
+	return crossing | outside << 4;
+}
 
-	qt->update_tick ^= 1;
-	uint32_t update_tick = qt->update_tick;
 
-	uint64_t slice_length = (uint64_t) qt->reorder_churn << QUADTREE_REORDER_SHIFT;
-	qt->reorder_churn = 0;
+#if defined(__x86_64__) || defined(__i386__)
 
-	uint32_t slice_begin = qt->migrate_position;
-	uint32_t slice_end = MACRO_MIN(slice_begin + slice_length, qt->node_entities_used);
+attr_target("sse") uint32_t
+quadtree_update_flags_sse(
+	const rect_extent_t* entity_extent,
+	const rect_extent_t* node_extent
+	)
+{
+	__m128 node_bounds = _mm_loadu_ps(&node_extent->min_x);
+	__m128 entity_bounds = _mm_loadu_ps(&entity_extent->min_x);
+	__m128 swapped_bounds = _mm_shuffle_ps(entity_bounds, entity_bounds, _MM_SHUFFLE(1, 0, 3, 2));
 
-	if(slice_begin == 0 && qt->live_entities + (qt->live_entities >> 5) > qt->region_size)
-	{
-		qt->force_reorder = true;
-		slice_end = slice_begin;
-	}
+	uint32_t crossing = (_mm_movemask_ps(_mm_cmple_ps(entity_bounds, node_bounds)) & 0b0011) |
+		(_mm_movemask_ps(_mm_cmpge_ps(entity_bounds, node_bounds)) & 0b1100);
+	uint32_t outside = (_mm_movemask_ps(_mm_cmplt_ps(swapped_bounds, node_bounds)) & 0b0011) |
+		(_mm_movemask_ps(_mm_cmpgt_ps(swapped_bounds, node_bounds)) & 0b1100);
 
+	return crossing | outside << 4;
+}
+
+#endif
+
+
+attr_inline void
+quadtree_update_walk(
+	quadtree_t* qt,
+	quadtree_update_fn_t update_fn,
+	void* user_data,
+	uint32_t update_tick,
+	uint32_t slice_begin,
+	uint32_t slice_end,
+	quadtree_update_flags_fn_t flags_fn
+	)
+{
 	bool last_slice = slice_end >= qt->node_entities_used;
 	if(last_slice)
 	{
@@ -1467,13 +1502,15 @@ quadtree_update(
 		bool forward = node->head >= slice_begin;
 		bool move = forward && node->head < slice_end;
 
+		quadtree_node_entity_t* callback_entity = node_entities;
+		uint32_t* callback_next = node_entities_next;
+
 		do
 		{
-			++node_entities_next;
-			++node_entities;
-			++node_entities_flags;
+			++callback_next;
+			++callback_entity;
 
-			uint32_t entity_idx = node_entities->index;
+			uint32_t entity_idx = callback_entity->index;
 			quadtree_entity_t* entity = entities + entity_idx;
 
 			if(forward)
@@ -1481,7 +1518,7 @@ quadtree_update(
 				if(!entity->in_nodes)
 				{
 					entity_idx = entity->next;
-					node_entities->index = entity_idx;
+					callback_entity->index = entity_idx;
 					entity = entities + entity_idx;
 				}
 				else if(move && entity->update_tick != update_tick &&
@@ -1497,7 +1534,7 @@ quadtree_update(
 						entity->in_nodes = 0;
 						entity->next = new_entity_idx;
 
-						node_entities->index = new_entity_idx;
+						callback_entity->index = new_entity_idx;
 						entity_idx = new_entity_idx;
 						entity = entities + entity_idx;
 					}
@@ -1515,6 +1552,17 @@ quadtree_update(
 
 				entity->status = update_fn(qt, &entity->extent, data + entity_idx, user_data);
 			}
+		}
+		while(*callback_next);
+
+		do
+		{
+			++node_entities_next;
+			++node_entities;
+			++node_entities_flags;
+
+			uint32_t entity_idx = node_entities->index;
+			quadtree_entity_t* entity = entities + entity_idx;
 
 			if(entity->status == QUADTREE_STATUS_NOT_CHANGED)
 			{
@@ -1526,11 +1574,9 @@ quadtree_update(
 			uint8_t old_flags = *node_entities_flags;
 			uint8_t pos_flags = node->position_flags;
 
-			uint8_t new_flags =
-				((-(uint8_t)(entity->extent.max_y >= node_extent.max_y)) & 0b1000 & ~pos_flags) |
-				((-(uint8_t)(entity->extent.max_x >= node_extent.max_x)) & 0b0100 & ~pos_flags) |
-				((-(uint8_t)(entity->extent.min_y <= node_extent.min_y)) & 0b0010 & ~pos_flags) |
-				((-(uint8_t)(entity->extent.min_x <= node_extent.min_x)) & 0b0001 & ~pos_flags);
+			uint32_t flags = flags_fn(&entity->extent, &node_extent);
+			uint8_t new_flags = flags & ~pos_flags & 0b1111;
+			bool outside = (flags >> 4) & ~pos_flags & 0b1111;
 
 			*node_entities_flags = new_flags;
 			bool crossed_new_boundary = new_flags & ~old_flags;
@@ -1561,12 +1607,7 @@ quadtree_update(
 				qt->normalization |= QUADTREE_NOT_NORMALIZED_HARD;
 			}
 
-			if(
-				(entity->extent.max_x < node_extent.min_x && !(node->position_flags & 0b0001)) ||
-				(entity->extent.max_y < node_extent.min_y && !(node->position_flags & 0b0010)) ||
-				(node_extent.max_x < entity->extent.min_x && !(node->position_flags & 0b0100)) ||
-				(node_extent.max_y < entity->extent.min_y && !(node->position_flags & 0b1000))
-				)
+			if(outside)
 			{
 				uint32_t node_removal_idx;
 				quadtree_node_removal_t* node_removal;
@@ -1683,6 +1724,78 @@ quadtree_update(
 	if(changed)
 	{
 		qt->normalization |= QUADTREE_NOT_NORMALIZED_SOFT;
+	}
+}
+
+
+#if defined(__x86_64__) || defined(__i386__)
+
+attr_noinline attr_target("sse") void
+quadtree_update_sse(
+	quadtree_t* qt,
+	quadtree_update_fn_t update_fn,
+	void* user_data,
+	uint32_t update_tick,
+	uint32_t slice_begin,
+	uint32_t slice_end
+	)
+{
+	quadtree_update_walk(qt, update_fn, user_data, update_tick, slice_begin, slice_end, quadtree_update_flags_sse);
+}
+
+#endif
+
+
+attr_noinline void
+quadtree_update_scalar(
+	quadtree_t* qt,
+	quadtree_update_fn_t update_fn,
+	void* user_data,
+	uint32_t update_tick,
+	uint32_t slice_begin,
+	uint32_t slice_end
+	)
+{
+	quadtree_update_walk(qt, update_fn, user_data, update_tick, slice_begin, slice_end, quadtree_update_flags_scalar);
+}
+
+
+void
+quadtree_update(
+	quadtree_t* qt,
+	quadtree_update_fn_t update_fn,
+	void* user_data
+	)
+{
+	assert_not_null(qt);
+	assert_not_null(update_fn);
+
+	quadtree_normalize_hard(qt);
+
+	qt->update_tick ^= 1;
+	uint32_t update_tick = qt->update_tick;
+
+	uint64_t slice_length = (uint64_t) qt->reorder_churn << QUADTREE_REORDER_SHIFT;
+	qt->reorder_churn = 0;
+
+	uint32_t slice_begin = qt->migrate_position;
+	uint32_t slice_end = MACRO_MIN(slice_begin + slice_length, qt->node_entities_used);
+
+	if(slice_begin == 0 && qt->live_entities + (qt->live_entities >> 5) > qt->region_size)
+	{
+		qt->force_reorder = true;
+		slice_end = slice_begin;
+	}
+
+#if defined(__x86_64__) || defined(__i386__)
+	if(__builtin_cpu_supports("sse"))
+	{
+		quadtree_update_sse(qt, update_fn, user_data, update_tick, slice_begin, slice_end);
+	}
+	else
+#endif
+	{
+		quadtree_update_scalar(qt, update_fn, user_data, update_tick, slice_begin, slice_end);
 	}
 }
 
