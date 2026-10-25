@@ -245,6 +245,26 @@ do															\
 while(0);
 
 
+uint32_t
+quadtree_region_base(
+	const quadtree_t* qt,
+	uint32_t region
+	)
+{
+	return 1 + region * qt->region_size;
+}
+
+
+uint32_t
+quadtree_region_end(
+	const quadtree_t* qt,
+	uint32_t region
+	)
+{
+	return 1 + (region + 1) * qt->region_size;
+}
+
+
 void
 quadtree_insert(
 	quadtree_t* qt,
@@ -287,13 +307,14 @@ quadtree_remove(
 
 	uint32_t entity_idx = data - qt->data;
 
+	assert_gt(entity_idx, 0);
+	assert_lt(entity_idx, MACRO_MAX(qt->entities_used, quadtree_region_end(qt, 1)));
+
 	if(!qt->entities[entity_idx].in_nodes)
 	{
 		entity_idx = qt->entities[entity_idx].next;
+		assert_gt(entity_idx, 0);
 	}
-
-	assert_gt(entity_idx, 0);
-	assert_lt(entity_idx, qt->entities_used);
 
 	if(qt->removals_used >= qt->removals_size)
 	{
@@ -312,26 +333,6 @@ quadtree_remove(
 	removal->entity_idx = entity_idx;
 
 	qt->normalization |= QUADTREE_NOT_NORMALIZED_HARD;
-}
-
-
-uint32_t
-quadtree_region_base(
-	const quadtree_t* qt,
-	uint32_t region
-	)
-{
-	return 1 + region * qt->region_size;
-}
-
-
-uint32_t
-quadtree_region_end(
-	const quadtree_t* qt,
-	uint32_t region
-	)
-{
-	return 1 + (region + 1) * qt->region_size;
 }
 
 
@@ -896,6 +897,7 @@ quadtree_normalize_rebuild(
 
 		for(uint32_t i = new_entities_used; i < new_entities_size; ++i)
 		{
+			new_entities[i].next = 0;
 			new_entities[i].in_nodes = 0;
 		}
 
