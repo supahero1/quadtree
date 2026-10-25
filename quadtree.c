@@ -774,6 +774,9 @@ quadtree_normalize(
 
 		uint32_t* entity_map = NULL;
 
+		float* sort_keys = NULL;
+		uint32_t sort_keys_size = 0;
+
 		if(reorder)
 		{
 			new_entities = alloc_malloc(new_entities, new_entities_size);
@@ -1200,9 +1203,23 @@ quadtree_normalize(
 				new_node->head = new_node_entities_used;
 				new_node->count = node->count;
 
+				if(node->count > sort_keys_size)
+				{
+					uint32_t new_size = MACRO_NEXT_OR_EQUAL_POWER_OF_2(MACRO_MAX(node->count, QUADTREE_LEAF_BUFFER_SIZE));
+
+					sort_keys = alloc_remalloc(sort_keys, sort_keys_size, new_size);
+					assert_not_null(sort_keys);
+
+					sort_keys_size = new_size;
+				}
+
+				uint32_t idx_in_leaf = 0;
+
 				while(1)
 				{
 					uint32_t entity_idx = node_entities.entities[node_entity_idx].index;
+					sort_keys[idx_in_leaf++] = entities[entity_idx].extent.QUADTREE_SORT_BY_MEMBER_MIN;
+
 					if(reorder && !entity_map[entity_idx])
 					{
 						uint32_t new_entity_idx = new_entities_used++;
@@ -1237,26 +1254,32 @@ quadtree_normalize(
 
 				for(uint32_t sort_idx = 1; sort_idx < sorted_count; ++sort_idx)
 				{
+					if(!(sort_keys[sort_idx - 1] > sort_keys[sort_idx]))
+					{
+						continue;
+					}
+
 					quadtree_node_entity_t* insert_entity = head_entity + sort_idx;
 					uint8_t* insert_flags = head_flags + sort_idx;
+					float* insert_key = sort_keys + sort_idx;
 
 					uint32_t sort_entity_idx = insert_entity->index;
 					uint8_t sort_flags = *insert_flags;
-					float sort_min = new_entities[sort_entity_idx].extent.QUADTREE_SORT_BY_MEMBER_MIN;
+					float sort_min = *insert_key;
 
-					while(
-						insert_entity != head_entity &&
-						new_entities[insert_entity[-1].index].extent.QUADTREE_SORT_BY_MEMBER_MIN > sort_min
-						)
+					while(insert_entity != head_entity && insert_key[-1] > sort_min)
 					{
 						insert_entity->index = insert_entity[-1].index;
 						*insert_flags = insert_flags[-1];
+						*insert_key = insert_key[-1];
 						--insert_entity;
 						--insert_flags;
+						--insert_key;
 					}
 
 					insert_entity->index = sort_entity_idx;
 					*insert_flags = sort_flags;
+					*insert_key = sort_min;
 				}
 			}
 		}
@@ -1299,6 +1322,8 @@ quadtree_normalize(
 		qt->node_entities = new_node_entities;
 		qt->node_entities_used = new_node_entities_used;
 		qt->node_entities_size = new_node_entities_size;
+
+		alloc_free(sort_keys, sort_keys_size);
 
 		if(reorder)
 		{
@@ -1987,7 +2012,7 @@ quadtree_collide_avx(
 	quadtree_node_entity_t* node_entities_end = state->qt->node_entities.entities + state->qt->node_entities_used;
 	quadtree_entity_t* entities = state->entities;
 
-	uint32_t sweep_size = 256;
+	uint32_t sweep_size = QUADTREE_LEAF_BUFFER_SIZE;
 
 	float* min_x = alloc_malloc(min_x, sweep_size);
 	assert_ptr(min_x, sweep_size);
