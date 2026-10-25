@@ -1902,6 +1902,28 @@ quadtree_collide(
 				entry->idx[1] = index_b;
 				entry->next = ht[hash];
 				ht[hash] = entry_idx;
+
+				if(ht_entries_used > ht_size)
+				{
+					alloc_free(ht, ht_size);
+
+					ht_size <<= 1;
+					ht_mask = ht_size - 1;
+
+					ht = alloc_calloc(ht, ht_size);
+					assert_ptr(ht, ht_size);
+
+					for(uint32_t rehash_idx = 1; rehash_idx < ht_entries_used; ++rehash_idx)
+					{
+						quadtree_ht_entry_t* rehash_entry = ht_entries + rehash_idx;
+
+						uint32_t rehash = rehash_entry->idx[0] * 48611 + rehash_entry->idx[1] * 50261;
+						rehash &= ht_mask;
+
+						rehash_entry->next = ht[rehash];
+						ht[rehash] = rehash_idx;
+					}
+				}
 			}
 #endif
 
