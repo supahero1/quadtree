@@ -1335,6 +1335,8 @@ quadtree_update(
 	uint32_t node_removals_used = qt->node_removals_used;
 	uint32_t node_removals_size = qt->node_removals_size;
 
+	bool changed = false;
+
 	quadtree_node_info_t node_infos[qt->dfs_length];
 	quadtree_node_info_t* node_info = node_infos;
 
@@ -1384,6 +1386,8 @@ quadtree_update(
 			{
 				continue;
 			}
+
+			changed = true;
 
 			uint8_t old_flags = *node_entities_flags;
 			uint8_t pos_flags = node->position_flags;
@@ -1467,6 +1471,11 @@ quadtree_update(
 	qt->node_removals = node_removals;
 	qt->node_removals_used = node_removals_used;
 	qt->node_removals_size = node_removals_size;
+
+	if(changed)
+	{
+		qt->normalization |= QUADTREE_NOT_NORMALIZED_SOFT;
+	}
 }
 
 
