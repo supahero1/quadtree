@@ -12,6 +12,11 @@ build:
 	# valgrind ./test
 	# valgrind --tool=callgrind ./test
 
+.PHONY: chaos
+chaos:
+	$(CC) chaos.c -o chaos -O2 -g3 $(CORE_F) -lm
+	./chaos
+
 .PHONY: profile
 profile:
 	$(RM) *.gcda

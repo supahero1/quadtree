@@ -285,6 +285,8 @@ struct quadtree
 	uint8_t update_tick;
 
 	quadtree_normalized_t normalization;
+	uint32_t iterating;
+	bool querying;
 	bool merge_threshold_set;
 
 	rect_extent_t rect_extent;
