@@ -855,10 +855,10 @@ chaos_bounce(
 		data->vy = -fabsf(data->vy);
 	}
 
-	extent->min_x = MACRO_MAX(extent->min_x, qt.rect_extent.min_x);
-	extent->min_y = MACRO_MAX(extent->min_y, qt.rect_extent.min_y);
-	extent->max_x = MACRO_MIN(extent->max_x, qt.rect_extent.max_x);
-	extent->max_y = MACRO_MIN(extent->max_y, qt.rect_extent.max_y);
+	extent->min_x = MACRO_MIN(MACRO_MAX(extent->min_x, qt.rect_extent.min_x), qt.rect_extent.max_x);
+	extent->min_y = MACRO_MIN(MACRO_MAX(extent->min_y, qt.rect_extent.min_y), qt.rect_extent.max_y);
+	extent->max_x = MACRO_MAX(MACRO_MIN(extent->max_x, qt.rect_extent.max_x), qt.rect_extent.min_x);
+	extent->max_y = MACRO_MAX(MACRO_MIN(extent->max_y, qt.rect_extent.max_y), qt.rect_extent.min_y);
 }
 
 
