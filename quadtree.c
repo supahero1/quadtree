@@ -2521,7 +2521,7 @@ quadtree_collide(
 
 	quadtree_normalize_hard(qt);
 
-	if(qt->entities_used <= 1)
+	if(qt->node_entities_used <= 1)
 	{
 		return;
 	}
